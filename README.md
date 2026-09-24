@@ -1,0 +1,170 @@
+# NullModem Reader
+
+Nativer Cross-Platform QWK(E)-Offline-Reader mit automatischem Paketaustausch
+gegen NullModem BBS. ANSI-Art wird über dieselbe Grid-Matrix dargestellt, die
+die BBS selbst benutzt.
+
+## Abhängigkeit
+
+Der Reader hängt an
+[dem Kit](https://git.maik.ch/nullmodem/kit) — dem gemeinsamen Unterbau mit
+NullModem BBS: `ansi` (Grid-Matrix, CP437, SGR, Layout, Templates), `qwk`
+(QWK/QWKE-Formatschicht), `zmodem`. Server und Reader müssen sich über
+Dateiformat und Bildschirmdarstellung einig sein; zwei Kopien desselben Codes
+driften ab dem ersten Bugfix auseinander, und beim QWK-Format merkt man das
+erst, wenn jemandem Post verlorengeht.
+
+Weil dem Kit in einem privaten Repo liegt, braucht jede Maschine, die den
+Reader baut, das einmal:
+
+```
+go env -w GOPRIVATE=git.maik.ch
+git config --global url."ssh://git@git.maik.ch:222/".insteadOf "https://git.maik.ch/"
+```
+
+Das Erste hält das Modul vom öffentlichen Go-Proxy und der
+Checksum-Datenbank fern, das Zweite lässt Go per SSH statt HTTPS klonen.
+
+### Pakete im Reader
+
+| Paket | Rolle |
+|---|---|
+| `internal/app` | **Die gesamte Oberfläche.** Kennt weder Terminal noch Fenster: Tasten rein, `ansi.Grid` raus |
+| `internal/tui` | Terminal-Frontend — malt die Grid in tcell-Zellen |
+| `internal/gui` | Fenster-Frontend — malt dieselbe Grid mit einem CP437-Bitmapfont |
+| `internal/exchange` | Ein Mailaustausch: senden, dann holen — plus die Sperre dagegen, dass zwei gleichzeitig laufen |
+| `internal/sched` | Unbeaufsichtigtes Pollen: Intervall, Jitter, Backoff |
+| `internal/xfer`, `store`, `compose`, `ui`, `config` | Transport, Warteschlange und Lesezeiger, Verfassen, Grid-Aufbereitung, Konfiguration |
+
+## Die Matrix
+
+`ansi.Grid` ist die einzige Repräsentation von Bildschirminhalt; alles andere
+ist ein Blitter darüber:
+
+| Blitter | Ziel |
+|---|---|
+| `ansi.Grid.Encode` (aus der BBS) | Terminal, das CP437 nativ spricht (SyncTERM, PuTTY über Telnet) |
+| `ansi.ToHTML` (aus der BBS) | Web-Vorschau |
+| `ui.GridToTerminal` | modernes UTF-8-Terminal, zeilenweise Ausgabe |
+| `tui.present` | tcell-Vollbild, Zelle für Zelle |
+| `gui.paint` | Fenster, CP437-Bitmapfont über `Cell.Char` |
+| `gui.Rasterize` | PNG — dasselbe Bild wie die GUI, nur ohne Fenster |
+
+Nicht nur die Kunst geht diesen Weg, sondern **die ganze Oberfläche**: Listen,
+Kopfzeilen, Statusleiste und Eingabeformular werden in eine Grid gezeichnet.
+Ein Frontend ist damit ein Blitter und eine Eingabequelle, keine zweite Kopie
+der Oberfläche — deshalb können Terminal und Fenster nicht auseinanderdriften.
+
+Der UTF-8-Blitter ist nötig, weil rohe CP437-Bytes in einem UTF-8-Terminal als
+Mojibake ankommen. Der Weg über die Matrix löst zusätzlich cursor-adressierte
+Art auf, die nicht in Zeichenreihenfolge gezeichnet wird.
+
+## Stand
+
+**Fertig und getestet**
+
+- QWK/QWKE-Formatschicht in *beide* Richtungen — die BBS konnte nur schreiben,
+  der Reader braucht auch die Leseseite: `ReadControlDAT`, `OpenPacket`,
+  `ParseQWKEKludges`, `ReadToReaderEXT`, `BuildReplyPacket`
+- Transport gegen die BBS-API: Login, Download (204 = keine neue Post),
+  Upload, Area-Auswahl
+- Darstellung: ANSI-Art, CP437-Prosa, ASCII-Art-Erkennung, Header-Felder
+- **TUI** (tcell): Konferenzliste → Nachrichtenliste → Nachricht, Welcome-Screen,
+  Scrollen, Hilfe-Overlay, Resize. Gegen tcells Simulations-Screen getestet,
+  nicht nur von Hand angesehen.
+- **Antworten verfassen**: `r` antwortet (Empfänger, Betreff und Zitat vorbelegt),
+  `e` schreibt neu. Der Nachrichtentext geht an `$VISUAL`/`$EDITOR` — deine
+  Tastenbelegung, dein Undo, deine Rechtschreibprüfung. Entwürfe landen in einer
+  Warteschlange, die einen Neustart übersteht; `nmr fetch` baut daraus ein `.REP`
+  und sendet es.
+- **Lesezeiger**: Ungelesenes ist mit `•` markiert, die Konferenzliste zeigt
+  `3/12 msg`, eine Konferenz öffnet bei der ersten ungelesenen Nachricht,
+  `m` markiert alles gelesen. Bleibt über Sitzungen und Pakete hinweg erhalten.
+- **GUI** (Ebitengine): eigenes Fenster mit eingebettetem CP437-8×16-Font,
+  ganzzahlige Skalierung, DOS-Palette. Dieselbe Oberfläche wie im Terminal,
+  nur pixelgenau — Blockgrafik kachelt nahtlos.
+- **Scheduler**: `nmr daemon` tauscht nach Zeitplan aus — pro System eigenes
+  Intervall, Jitter gegen gleichzeitige Zugriffe, exponentielles Backoff bei
+  Ausfällen (gedeckelt bei einer Stunde), Dateisperre gegen Doppelläufe.
+- `nmr`-Kommandozeile: `open`, `gui`, `init`, `fetch`, `daemon`, `outbox`, `areas`, `list`, `read`, `screen`
+- Baut für darwin/{arm64,amd64}, linux/{amd64,arm64}, windows/amd64
+
+**Offen**
+
+- Nichts Geplantes mehr. `bbskit/zmodem` liegt ungenutzt bereit, falls die
+  serielle Strecke doch einmal gebraucht wird.
+
+## Ausprobieren
+
+```
+go run ./tools/mkfixture testdata/SAMPLE.QWK
+go run ./cmd/nmr open testdata/SAMPLE.QWK     # im Terminal
+go run ./cmd/nmr gui  testdata/SAMPLE.QWK     # im eigenen Fenster
+```
+
+Tasten: `↑↓`/`jk` bewegen, `Enter` öffnen, `Esc`/`q` zurück, `w` Welcome-Screen,
+`n`/`p` nächste/vorige Nachricht, `space` blättern, `r` antworten, `e` neu
+schreiben, `m` Konferenz als gelesen markieren, `o` Warteschlange, `?` Hilfe,
+`Q` beenden.
+
+Ohne Vollbild:
+
+```
+go run ./cmd/nmr list   testdata/SAMPLE.QWK
+go run ./cmd/nmr screen testdata/SAMPLE.QWK
+go run ./cmd/nmr read   testdata/SAMPLE.QWK
+```
+
+Gegen eine echte BBS:
+
+```
+go run ./cmd/nmr init          # schreibt die Konfiguration
+export NMR_PASSWORD_NULLMDM=…  # Passwort nicht in die Datei
+go run ./cmd/nmr fetch
+go run ./cmd/nmr open            # das zuletzt geholte Paket
+```
+
+Automatisch im Hintergrund, mit `poll:` je System in der Konfiguration:
+
+```
+go run ./cmd/nmr daemon
+```
+
+Der Daemon tauscht sofort beim Start aus und dann nach Intervall. `nmr fetch`
+von Hand ist parallel dazu sicher: beide nehmen dieselbe Sperre, der zweite
+meldet das und tut nichts.
+
+## Funde unterwegs
+
+`withQWKEKludges` in NullModem BBS schrieb `TO:`/`FROM:`/`SUBJ:` in den
+Nachrichtentext. Das sind aber die Beschriftungen der *Header-Felder* im
+Beispiel der QWKE-1.02-Spezifikation; die Kludges selbst heißen `To:`, `From:`,
+`Subject:`. Kein spezifikationstreuer Reader (MultiMail, NoCarrierMail) hätte
+die alten Zeilen erkannt — er hätte die auf 25 Byte gekürzten Header-Felder
+angezeigt und die Kludge-Zeilen obendrein als Text.
+
+In dem Kit ist das korrigiert. `ParseQWKEKludges` akzeptiert beim *Lesen*
+weiterhin beide Schreibweisen, damit Pakete älterer NullModem-Versionen
+lesbar bleiben.
+
+Zweitens ersetzte `EncodeCP437` alles Unbekannte kommentarlos durch `?`. Eine
+Mac-Tastatur liefert typografische Anführungszeichen, Gedankenstriche und
+Auslassungspunkte von selbst — die wurden damit zu Fragezeichen, ohne dass
+jemand es merkte. Jetzt transliteriert die Funktion sie nach ASCII, und
+`EncodeCP437Report` nennt, was wirklich nicht übertragbar war.
+
+## Schriftart
+
+Die GUI bettet einen CP437-8×16-Bitmapfont ein, erzeugt aus
+[Spleen](https://github.com/fcambus/spleen) (BSD-2-Clause, Copyright Frederic
+Cambus — Lizenztext in `reader/assets/font/LICENSE.spleen`). `tools/mkfont`
+wandelt Spleens CP437-BDF in das flache VGA-ROM-Format um, damit
+nachvollziehbar bleibt, woher die 4096 Bytes stammen:
+
+```
+go run ./tools/mkfont spleen-8x16-ibm-437.bdf assets/font/cp437-8x16.bin
+```
+
+Ein Outline-Font käme hier nicht in Frage: Blockgrafik muss auf jeder
+Skalierungsstufe nahtlos kacheln, und das kann nur ein Bitmapfont mit
+ganzzahliger Vergrößerung zusagen.

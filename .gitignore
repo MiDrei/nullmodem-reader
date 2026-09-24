@@ -1,0 +1,11 @@
+# Testdaten: reproduzierbar mit "go run ./tools/mkfixture testdata/SAMPLE.QWK"
+/testdata/SAMPLE.QWK
+/testdata/SAMPLE.ANS
+
+# Go
+*.test
+*.out
+
+# Ein lokaler Workspace gehoert dem Entwickler, nicht dem Repo.
+go.work
+go.work.sum

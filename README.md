@@ -14,16 +14,15 @@ Dateiformat und Bildschirmdarstellung einig sein; zwei Kopien desselben Codes
 driften ab dem ersten Bugfix auseinander, und beim QWK-Format merkt man das
 erst, wenn jemandem Post verlorengeht.
 
-Weil dem Kit in einem privaten Repo liegt, braucht jede Maschine, die den
-Reader baut, das einmal:
+Das Kit ist öffentlich, liegt aber auf git.maik.ch statt bei einem der
+großen Hoster. Damit Go es direkt dort holt statt über den öffentlichen
+Go-Proxy und die Checksum-Datenbank, einmal pro Maschine:
 
 ```
 go env -w GOPRIVATE=git.maik.ch
-git config --global url."ssh://git@git.maik.ch:222/".insteadOf "https://git.maik.ch/"
 ```
 
-Das Erste hält das Modul vom öffentlichen Go-Proxy und der
-Checksum-Datenbank fern, das Zweite lässt Go per SSH statt HTTPS klonen.
+`go.sum` legt die Prüfsumme trotzdem fest.
 
 ### Pakete im Reader
 
@@ -87,12 +86,50 @@ Art auf, die nicht in Zeichenreihenfolge gezeichnet wird.
   Intervall, Jitter gegen gleichzeitige Zugriffe, exponentielles Backoff bei
   Ausfällen (gedeckelt bei einer Stunde), Dateisperre gegen Doppelläufe.
 - `nmr`-Kommandozeile: `open`, `gui`, `init`, `fetch`, `daemon`, `outbox`, `areas`, `list`, `read`, `screen`
-- Baut für darwin/{arm64,amd64}, linux/{amd64,arm64}, windows/amd64
+- Baut für linux, darwin und windows, je amd64 und arm64 — alles ohne cgo,
+  also von einer einzigen Maschine aus (siehe *Releases*)
 
 **Offen**
 
 - Nichts Geplantes mehr. `bbskit/zmodem` liegt ungenutzt bereit, falls die
   serielle Strecke doch einmal gebraucht wird.
+
+## Installieren
+
+Fertige Builds liegen unter
+[Releases](https://git.maik.ch/nullmodem/reader/releases): ein Archiv pro
+Plattform mit `nmr` (bzw. `nmr.exe`), dieser README und der Font-Lizenz, dazu
+`SHA256SUMS` zum Prüfen (`sha256sum -c SHA256SUMS`). `nmr version` zeigt,
+welche Version läuft.
+
+- **Linux**: braucht glibc (nicht Alpine/musl) — Ebitengine lädt X11 zur
+  Laufzeit, ohne cgo. Für `nmr gui` außerdem X11 bzw. XWayland und OpenGL;
+  der Terminal-Modus braucht beides nicht.
+- **macOS**: die Binaries sind nicht signiert. Nach dem Download einmal
+  `xattr -d com.apple.quarantine nmr`, sonst blockiert Gatekeeper den Start.
+- **Windows**: `nmr.exe` ist ein Konsolenprogramm; `nmr gui` öffnet
+  zusätzlich ein Fenster.
+
+Oder aus dem Quelltext: `go install git.maik.ch/nullmodem/reader/cmd/nmr@latest`
+(mit `GOPRIVATE` wie oben).
+
+## Releases
+
+```
+DRY_RUN=1 scripts/release.sh v0.2.0   # testen und nach dist/ bauen, sonst nichts
+GITEA_TOKEN=… scripts/release.sh v0.2.0
+```
+
+Das Skript prüft, dass `main` sauber und mit `origin` gleichauf ist und
+`go.mod` kein `replace` enthält, lässt `go vet` und die Tests laufen, baut
+alle sechs Ziele mit `GOWORK=off` — also gegen die Kit-Version aus `go.mod`,
+nicht gegen einen lokalen Checkout — und packt sie samt `SHA256SUMS`. Erst
+danach setzt es den Tag, pusht ihn und legt das Release mit den Archiven auf
+git.maik.ch an. `GITEA_TOKEN` ist ein persönlicher Token mit
+`write:repository` (Einstellungen → Anwendungen).
+
+Braucht der Reader eine neue Kit-Version, kommt die zuerst — siehe
+*Releases* in der README des Kits.
 
 ## Ausprobieren
 

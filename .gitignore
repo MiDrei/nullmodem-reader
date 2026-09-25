@@ -9,3 +9,6 @@
 # Ein lokaler Workspace gehoert dem Entwickler, nicht dem Repo.
 go.work
 go.work.sum
+
+# Release-Artefakte (scripts/release.sh)
+/dist/

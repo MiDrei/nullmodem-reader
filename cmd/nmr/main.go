@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"syscall"
@@ -42,12 +43,28 @@ const usage = `nmr -- QWK(E) offline reader
   nmr list    <packet.qwk>        list the packet's conferences and messages
   nmr read    <packet.qwk> [-c N] [-m N]   display messages
   nmr screen  <packet.qwk> [file] display a screen from the packet (default: welcome)
+  nmr version                     print the version
 
 Common flags:
   -s ID       which configured system to talk to (default: the only one)
   -config P   configuration file (default: the platform config directory)
   -w N        render width in columns (default: the terminal's, else 80)
 `
+
+// version is stamped by scripts/release.sh (-ldflags "-X main.version=...").
+var version = ""
+
+// versionString is version, else the module version "go install" records,
+// else "dev" for a plain local build.
+func versionString() string {
+	if version != "" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return "dev"
+}
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -83,6 +100,9 @@ func run(args []string) error {
 		return cmdRead(rest)
 	case "screen":
 		return cmdScreen(rest)
+	case "version", "-v", "--version":
+		fmt.Println("nmr " + versionString())
+		return nil
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 		return nil

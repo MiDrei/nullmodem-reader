@@ -8,7 +8,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"git.maik.ch/nullmodem/kit/ansi"
-	"git.maik.ch/nullmodem/kit/qwk"
 	"git.maik.ch/nullmodem/reader/internal/app"
 )
 
@@ -40,12 +39,8 @@ type window struct {
 	ticks int
 }
 
-// Run opens the packet in a window and returns when the user quits.
-func Run(path string, p *qwk.Packet, opts app.Options) error {
-	a, err := app.New(path, p, opts)
-	if err != nil {
-		return err
-	}
+// Run shows the reader in a window and returns when the user quits.
+func Run(a *app.App) error {
 	at, err := loadAtlas()
 	if err != nil {
 		return err
@@ -59,7 +54,7 @@ func Run(path string, p *qwk.Packet, opts app.Options) error {
 	w := &window{a: a, atlas: at, scale: defaultScale}
 	w.resizeTo(defaultCols*cellW*defaultScale, defaultRows*cellH*defaultScale)
 
-	ebiten.SetWindowTitle("QWKReader")
+	ebiten.SetWindowTitle("NullModem Reader")
 	ebiten.SetWindowSize(defaultCols*cellW*defaultScale, defaultRows*cellH*defaultScale)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	// The reader is idle between keypresses; redrawing 60 times a
@@ -67,8 +62,10 @@ func Run(path string, p *qwk.Packet, opts app.Options) error {
 	// text screen.
 	ebiten.SetScreenClearedEveryFrame(false)
 
+	// Draw runs every frame and Render picks up finished background
+	// work, so Wake has nothing to do here.
 	runErr := ebiten.RunGame(w)
-	if err := a.Save(); err != nil {
+	if err := a.Close(); err != nil {
 		fmt.Fprintln(os.Stderr, "nmr: could not save read markers:", err)
 	}
 	// Quitting is how the reader ends, not a failure.
@@ -78,12 +75,16 @@ func Run(path string, p *qwk.Packet, opts app.Options) error {
 	return nil
 }
 
-// Layout tells Ebitengine the offscreen size for a given window size.
-// Working at one logical pixel per screen pixel and scaling the whole
-// surface at the end keeps the font crisp.
+// Layout tells Ebitengine the size of the image Draw paints into: the
+// whole cells that fit, at the window's own scale. Draw blows the 1:1
+// offscreen surface up by w.scale itself, with nearest-neighbour
+// sampling, which keeps the font crisp -- so the size reported here
+// must already include that scale. Reporting the 1:1 size instead
+// made Ebitengine scale a second time and cut the picture down to its
+// top-left quarter.
 func (w *window) Layout(outsideWidth, outsideHeight int) (int, int) {
 	w.resizeTo(outsideWidth, outsideHeight)
-	return w.cols * cellW, w.rows * cellH
+	return w.cols * cellW * w.scale, w.rows * cellH * w.scale
 }
 
 // resizeTo works out how many whole character cells fit, at the

@@ -1,6 +1,7 @@
 package compose
 
 import (
+	"git.maik.ch/nullmodem/kit/ansi"
 	"os"
 	"path/filepath"
 	"strings"
@@ -304,14 +305,11 @@ func TestLoadTaglinesAddsTheUsersOwn(t *testing.T) {
 		t.Fatalf("missing file: %d taglines", n)
 	}
 	for _, tl := range DefaultTaglines {
-		if len(tl) > maxTagline {
+		if len([]rune(tl)) > maxTagline {
 			t.Errorf("default tagline too long: %q", tl)
 		}
-		for _, r := range tl {
-			if r > 127 {
-				t.Errorf("default tagline not ASCII: %q", tl)
-				break
-			}
+		if _, lost := ansi.EncodeCP437Report(tl); len(lost) > 0 {
+			t.Errorf("default tagline %q has characters CP437 cannot carry: %q", tl, string(lost))
 		}
 	}
 }

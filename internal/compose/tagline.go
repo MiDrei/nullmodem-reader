@@ -7,8 +7,8 @@ import (
 )
 
 // DefaultTaglines ship with the reader, in the spirit of the tagline
-// files Blue Wave and OLX users swapped. All plain ASCII, so they
-// survive the trip to CP437 on any board.
+// files Blue Wave and OLX users swapped. Every one of them fits CP437,
+// umlauts included, so none loses a character on the way to the BBS.
 var DefaultTaglines = []string{
 	"Modems don't die, they just lose carrier.",
 	"NO CARRIER",
@@ -28,8 +28,8 @@ var DefaultTaglines = []string{
 	"This message was composed offline. The typos are live.",
 	"All work and no play makes a dull BBS.",
 	"Offline ist das neue Online.",
-	"Frueher war mehr Baud.",
-	"Wer zuletzt pollt, liest am laengsten.",
+	"Früher war mehr Baud.",
+	"Wer zuletzt pollt, liest am längsten.",
 }
 
 // taglineMark opens a tagline, by the old readers' convention: three

@@ -93,8 +93,24 @@ func TestMessageGridLeavesPreformattedTextUnwrapped(t *testing.T) {
 	if g.Height != 3 {
 		t.Fatalf("Height = %d, want the art's own 3 rows rather than a rewrap", g.Height)
 	}
-	if got := gridRow(g, 0); got != "+---+   +-" {
-		t.Fatalf("row 0 = %q -- art should be clipped at the width, not reflowed", got)
+	// Kept whole on the 80-column canvas: the window clips what does
+	// not fit when it draws, the grid itself never cuts art short.
+	if got := gridRow(g, 0); got != "+---+   +---+   +---+" {
+		t.Fatalf("row 0 = %q -- art should be kept whole, not reflowed or cut", got)
+	}
+}
+
+func TestMessageGridLaysANSIArtOutAtEightyColumnsInANarrowerWindow(t *testing.T) {
+	// A full 80-column row followed by a second one: at 78 columns the
+	// first row would wrap and push everything below it down.
+	art := "\x1b[0;36m" + strings.Repeat("\xdb", 80) + "\r\n\x1b[0;33mX"
+	g := MessageGrid(art, 78)
+
+	if g.Width != 80 {
+		t.Fatalf("Width = %d, want the 80-column canvas", g.Width)
+	}
+	if g.Cells[80].Char != 'X' {
+		t.Fatalf("row 2 col 1 = %q, want X -- the first row wrapped", g.Cells[80].Char)
 	}
 }
 

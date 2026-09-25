@@ -136,6 +136,15 @@ der Reader sofort Post; sonst zeigt er alle heruntergeladenen Pakete zusammen
 als eine Ansicht. Was vor einem Austausch ungelesen war, bleibt so stehen, bis
 es gelesen ist — die BBS liefert eine Nachricht nur einmal aus.
 
+Aufräumen stellst du im Einrichtungsdialog unter „Keep days“ ein (in der
+Konfiguration `keep_days`, je BBS): Ein Paket, in dem alles gelesen ist, wird
+nach so vielen Tagen gelöscht, gesendete Antwortpakete ebenso; das neueste
+Paket bleibt immer. 0 behält alles — so verhält sich auch eine Konfiguration,
+die den Eintrag noch nicht hat. Neu eingerichtet schlägt der Dialog 30 Tage
+vor. Aufgeräumt wird beim Start und nach jedem Austausch, auch bei `nmr
+fetch` und `nmr daemon`. Für eine Änderung im Dialog darf das Passwortfeld
+leer bleiben, wenn schon eines gespeichert ist.
+
 Die Lesezeiger hängen an der Nachrichtennummer. NullModem BBS vergibt dafür
 ab Version 0.25.1 die Datenbank-ID, die in jedem Paket gleich bleibt; vorher
 begann jedes Paket bei 1, sodass neue Post als gelesen erscheinen konnte.

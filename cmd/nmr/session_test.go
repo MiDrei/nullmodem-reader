@@ -21,6 +21,7 @@ import (
 
 	"git.maik.ch/nullmodem/reader/internal/app"
 	"git.maik.ch/nullmodem/reader/internal/config"
+	"git.maik.ch/nullmodem/reader/internal/store"
 )
 
 // fakeBBS answers the three calls setup and a first fetch make.
@@ -233,4 +234,117 @@ func gridText(g ansi.Grid) string {
 		b.WriteByte('\n')
 	}
 	return b.String()
+}
+
+func TestPruneDeletesOnlyOldFullyReadPacketsAndKeepsTheNewest(t *testing.T) {
+	_, path := newSession(t)
+	if err := config.Save(path, config.Config{Systems: []config.System{{ID: "NULLMODE", URL: "http://bbs.invalid", Username: "alice", KeepDays: 30}}}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	cfg, sys, err := loadSystem(path, "")
+	if err != nil {
+		t.Fatalf("loadSystem: %v", err)
+	}
+	d := systemDirs(cfg, sys)
+	sent := filepath.Join(d.up, "sent")
+	for _, dir := range []string{d.down, sent} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now := time.Now()
+	age := func(p string, days int) {
+		t.Helper()
+		when := now.Add(-time.Duration(days) * 24 * time.Hour)
+		if err := os.Chtimes(p, when, when); err != nil {
+			t.Fatal(err)
+		}
+	}
+	packet := func(name string, num, days int) string {
+		t.Helper()
+		p := filepath.Join(d.down, name)
+		control := qwk.ControlInfo{BBSName: "NullModem BBS", BBSID: "NULLMODE",
+			Conferences: []qwk.ConferenceInfo{{Number: 3, Name: "General"}}}
+		msgs := []qwk.PackedMessage{{Header: qwk.MessageHeader{Number: num, Conference: 3, To: "ALL", From: "BOB", Subject: name}, Text: "x"}}
+		if err := qwk.BuildQWKPacket(p, control, msgs); err != nil {
+			t.Fatalf("BuildQWKPacket: %v", err)
+		}
+		age(p, days)
+		return p
+	}
+	exists := func(p string) bool { _, err := os.Stat(p); return err == nil }
+
+	oldRead := packet("A.QWK", 101, 40)    // past keep_days, read: goes
+	oldUnread := packet("B.QWK", 102, 39)  // past keep_days, unread: stays
+	newestRead := packet("C.QWK", 103, 35) // past keep_days, read, but the newest: stays
+	read, _ := store.LoadReadState(d.readState)
+	read.MarkRead(3, 101)
+	read.MarkRead(3, 103)
+	if err := read.Save(); err != nil {
+		t.Fatal(err)
+	}
+	oldREP, newREP := filepath.Join(sent, "old.REP"), filepath.Join(sent, "new.REP")
+	os.WriteFile(oldREP, []byte("x"), 0o600)
+	os.WriteFile(newREP, []byte("x"), 0o600)
+	age(oldREP, 45)
+
+	removed, err := prune(cfg, sys, now)
+	if err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	if exists(oldRead) || !exists(oldUnread) || !exists(newestRead) {
+		t.Fatalf("after prune: A=%v B=%v C=%v, want A gone, B and C kept", exists(oldRead), exists(oldUnread), exists(newestRead))
+	}
+	if exists(oldREP) || !exists(newREP) {
+		t.Fatal("sent replies: want only the old one removed")
+	}
+	if removed != 2 {
+		t.Fatalf("removed = %d, want 2 (one packet, one reply)", removed)
+	}
+
+	// Once a newer packet arrives, C is no longer the newest and goes;
+	// the newcomer is recent and stays whatever its read state.
+	fresh := packet("D.QWK", 104, 1)
+	if _, err := prune(cfg, sys, now); err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	if exists(newestRead) || !exists(fresh) || !exists(oldUnread) {
+		t.Fatalf("second prune: C=%v D=%v B=%v, want C gone, D and B kept", exists(newestRead), exists(fresh), exists(oldUnread))
+	}
+
+	// keep_days 0 keeps everything.
+	sys.KeepDays = 0
+	if n, _ := prune(cfg, sys, now.Add(1000*24*time.Hour)); n != 0 {
+		t.Fatalf("keep_days 0 removed %d", n)
+	}
+}
+
+func TestSetupWithoutAPasswordKeepsTheStoredOneAndSavesKeepDays(t *testing.T) {
+	srv := fakeBBS(t)
+	s, path := newSession(t)
+	if _, err := s.setup(context.Background(), app.SetupInput{URL: srv.URL, Username: "alice", Password: "s3cret!", KeepDays: 30}); err != nil {
+		t.Fatalf("first setup: %v", err)
+	}
+	if _, err := s.setup(context.Background(), app.SetupInput{URL: srv.URL, Username: "alice", KeepDays: 7}); err != nil {
+		t.Fatalf("setup without a password: %v", err)
+	}
+	cfg, _ := config.Load(path)
+	sys := cfg.Systems[0]
+	if sys.KeepDays != 7 {
+		t.Fatalf("keep days = %d, want 7", sys.KeepDays)
+	}
+	if pw, _ := sys.Password(); pw != "s3cret!" {
+		t.Fatalf("stored password = %q, want it kept", pw)
+	}
+	if d := s.options().SetupDefaults; !d.HavePassword || d.KeepDays != 7 {
+		t.Fatalf("defaults = %+v", d)
+	}
+}
+
+func TestSetupWithoutAnyPasswordAsksForOne(t *testing.T) {
+	srv := fakeBBS(t)
+	s, _ := newSession(t)
+	if _, err := s.setup(context.Background(), app.SetupInput{URL: srv.URL, Username: "alice"}); err == nil || !strings.Contains(err.Error(), "enter your password") {
+		t.Fatalf("err = %v", err)
+	}
 }

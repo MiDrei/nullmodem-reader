@@ -6,6 +6,9 @@ import (
 	"git.maik.ch/nullmodem/kit/ansi"
 )
 
+// ArtWidth is the canvas BBS art is drawn for.
+const ArtWidth = 80
+
 // MessageGrid renders a QWK message body into the Grid matrix at the
 // given width.
 //
@@ -23,12 +26,22 @@ func MessageGrid(text string, width int) ansi.Grid {
 		width = 80
 	}
 	// Art carries its own colors and cursor moves, so it goes through
-	// the parser that understands them.
+	// the parser that understands them. It is laid out on the 80-column
+	// canvas it was drawn for even in a narrower window: cursor moves
+	// and full-width rows only land right at 80, and a narrow window
+	// then cuts the picture off at its edge instead of wrapping it into
+	// something else.
 	if ansi.HasEscapeCodes(text) {
-		return ansi.ParseGrid(text, width)
+		return ansi.ParseGrid(text, max(width, ArtWidth))
 	}
 
-	lines := layoutProse([]byte(text), width, ansi.IsPreformatted(text))
+	preformatted := ansi.IsPreformatted(text)
+	if preformatted {
+		// Same for ASCII art and hand-aligned tables: never rewrapped,
+		// so never cut short of the canvas either.
+		width = max(width, ArtWidth)
+	}
+	lines := layoutProse([]byte(text), width, preformatted)
 
 	g := ansi.NewGrid(width, max(len(lines), 1))
 	for row, line := range lines {

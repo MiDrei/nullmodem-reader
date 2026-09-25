@@ -107,7 +107,7 @@ func TestFirstRunSetupThenFetchOpensThePacket(t *testing.T) {
 	h.assertContains("Received 4 message(s). Password saved in the file.", "the status bar reports the exchange and keeps setup's note")
 }
 
-func TestSetupRejectsMissingFieldsWithoutCallingOut(t *testing.T) {
+func TestEnterJumpsToTheMissingFieldBeforeConnecting(t *testing.T) {
 	f := &fakeSession{t: t, packetPath: buildPacket(t)}
 	h := newHomeHarness(t, f, HomeSetup, "")
 
@@ -116,10 +116,39 @@ func TestSetupRejectsMissingFieldsWithoutCallingOut(t *testing.T) {
 	h.key(tcell.KeyTab) // skip the username
 	h.typeText("pw")
 	h.enter()
-
-	h.assertContains("Username is missing.", "an empty field is named")
 	if len(f.setupGot) != 0 {
 		t.Fatalf("setup was called with an empty username: %+v", f.setupGot)
+	}
+	h.typeText("bob") // Enter took us to the username
+	h.enter()
+	h.settleBackground()
+	if len(f.setupGot) != 1 || f.setupGot[0].Username != "bob" {
+		t.Fatalf("setup got %+v", f.setupGot)
+	}
+}
+
+func TestKeepDaysIsValidatedAndPassedOn(t *testing.T) {
+	f := &fakeSession{t: t, packetPath: buildPacket(t)}
+	opts := f.options()
+	opts.SetupDefaults = SetupInput{URL: "https://bbs.example.ch", Username: "alice", KeepDays: 30, HavePassword: true}
+	h := &harness{t: t, app: NewHome(opts, HomeSetup, ""), w: testWidth, h: testHeight}
+	h.draw()
+	h.assertContains("30", "the configured keep days are shown")
+	h.assertContains("Leave it empty to keep", "a stored password need not be retyped")
+
+	h.key(tcell.KeyTab) // from the password to keep days
+	h.typeText("-5")
+	h.enter()
+	h.assertContains("Keep days must be a number", "a negative value is refused")
+	if len(f.setupGot) != 0 {
+		t.Fatal("setup was called with invalid keep days")
+	}
+
+	h.typeText("14")
+	h.enter()
+	h.settleBackground()
+	if len(f.setupGot) != 1 || f.setupGot[0].KeepDays != 14 || f.setupGot[0].Password != "" {
+		t.Fatalf("setup got %+v, want keep days 14 and no password (keep the stored one)", f.setupGot)
 	}
 }
 

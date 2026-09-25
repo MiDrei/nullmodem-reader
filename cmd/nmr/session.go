@@ -30,10 +30,16 @@ type session struct {
 // "nmr daemon" uses, and the same as the starter config's.
 const defaultPoll = 30 * time.Minute
 
+// defaultKeepDays is what the setup screen offers for a new system.
+const defaultKeepDays = 30
+
 func (s session) options() app.Options {
-	opts := app.Options{Fetch: s.fetch, Latest: s.latest, Setup: s.setup}
+	opts := app.Options{Fetch: s.fetch, Latest: s.latest, Setup: s.setup,
+		SetupDefaults: app.SetupInput{KeepDays: defaultKeepDays}}
 	if _, sys, err := loadSystem(s.configPath, s.systemID); err == nil {
-		opts.SetupDefaults = app.SetupInput{URL: sys.URL, Username: sys.Username}
+		_, have := sys.Password()
+		opts.SetupDefaults = app.SetupInput{URL: sys.URL, Username: sys.Username,
+			KeepDays: sys.KeepDays, HavePassword: have}
 	}
 	return opts
 }
@@ -109,6 +115,9 @@ func (s session) latest() (app.Loaded, error) {
 // the queue and read markers they share. A packet that no longer opens
 // is skipped rather than keeping the rest from being read.
 func (s session) loadAll(cfg config.Config, sys config.System) (app.Loaded, error) {
+	if _, err := prune(cfg, sys, time.Now()); err != nil {
+		fmt.Fprintln(os.Stderr, "nmr: cleaning up old packets:", err)
+	}
 	paths, err := downloadedPackets(systemDirs(cfg, sys).down)
 	if err != nil {
 		return app.Loaded{}, err
@@ -139,13 +148,25 @@ func (s session) setup(ctx context.Context, in app.SetupInput) (string, error) {
 	url := normalizeURL(in.URL)
 	client := xfer.New(url, in.Username)
 
+	password := in.Password
+	if password == "" {
+		// Allowed when one is stored: changing the address or the
+		// keep days should not mean typing the password again.
+		_, sys, err := loadSystem(s.configPath, s.systemID)
+		stored, ok := sys.Password()
+		if err != nil || !ok {
+			return "", errors.New("enter your password -- none is stored yet")
+		}
+		password = stored
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	name, err := client.Info(ctx)
 	if err != nil {
 		return "", fmt.Errorf("could not reach a NullModem BBS at %s: %v", url, err)
 	}
-	if err := client.Login(ctx, in.Password); err != nil {
+	if err := client.Login(ctx, password); err != nil {
 		if errors.Is(err, xfer.ErrUnauthorized) {
 			return "", errors.New("the BBS rejected that username or password")
 		}
@@ -178,17 +199,21 @@ func (s session) setup(ctx context.Context, in app.SetupInput) (string, error) {
 	if name != "" {
 		sys.Name = name
 	}
-	sys.URL, sys.Username = url, in.Username
+	sys.URL, sys.Username, sys.KeepDays = url, in.Username, in.KeepDays
 
 	var note string
-	if err := sys.StorePassword(in.Password); err != nil {
+	switch err := sys.StorePassword(password); {
+	case err == nil:
+		sys.PasswordInFile = ""
+	case in.Password == "" && sys.PasswordInFile != "":
+		// The kept password already lives in the file; nothing new
+		// to say about it.
+	default:
 		// No keychain on this machine (a Linux box without a Secret
 		// Service, typically). A working reader beats a secure one
 		// that cannot log in, but the user should know where it went.
-		sys.PasswordInFile = in.Password
+		sys.PasswordInFile = password
 		note = "No system password store is available, so the password was saved in the config file."
-	} else {
-		sys.PasswordInFile = ""
 	}
 	if _, set := lookupEnv(sys.PasswordEnv()); set {
 		note = strings.TrimSpace(note + " " + sys.PasswordEnv() + " is set in the environment and overrides it.")

@@ -16,9 +16,11 @@ import (
 
 // Default window geometry: the classic 80x25 text screen at 2x, which
 // lands close to the apparent size of a real VGA display on a modern
-// panel.
+// panel -- two columns wider than 80, because a message body sits one
+// column in from the edge and 80-column art needs the full 80 after
+// that.
 const (
-	defaultCols  = 80
+	defaultCols  = 82
 	defaultRows  = 25
 	defaultScale = 2
 )

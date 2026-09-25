@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -43,7 +44,16 @@ type Loaded struct {
 // SetupInput is what the setup screen asks for.
 type SetupInput struct {
 	URL, Username, Password string
+	// KeepDays is how long read packets are kept; 0 keeps everything.
+	KeepDays int
+	// HavePassword, in Options.SetupDefaults, says a password is
+	// already stored: the field may then stay empty to keep it.
+	HavePassword bool
 }
+
+// maxKeepDays bounds the setting to something that is plainly a
+// number of days and not a typo.
+const maxKeepDays = 3650
 
 // ErrNeedsSetup tells the app that an exchange could not even log in --
 // no system configured, no password, or a rejected one -- so the fix is
@@ -312,15 +322,18 @@ func (v *homeView) key(a *App, ev *tcell.EventKey) bool {
 // BBS, then hands them to Options.Setup, which checks them against the
 // BBS before anything is saved.
 type setupForm struct {
-	url, username, password field
-	focus                   int
+	url, username, password, keepDays field
+	focus                             int
+	havePassword                      bool
 }
 
 func newSetupForm(defaults SetupInput) *setupForm {
 	v := &setupForm{
-		url:      newField("BBS address", defaults.URL),
-		username: newField("Username", defaults.Username),
-		password: newField("Password", ""),
+		url:          newField("BBS address", defaults.URL),
+		username:     newField("Username", defaults.Username),
+		password:     newField("Password", ""),
+		keepDays:     newField("Keep days", strconv.Itoa(defaults.KeepDays)),
+		havePassword: defaults.HavePassword,
 	}
 	v.password.mask = true
 	// Start where there is something to type.
@@ -342,9 +355,11 @@ func (v *setupForm) setFocus(i int) {
 	v.fields()[i].focus()
 }
 
-func (v *setupForm) fields() []*field { return []*field{&v.url, &v.username, &v.password} }
+func (v *setupForm) fields() []*field {
+	return []*field{&v.url, &v.username, &v.password, &v.keepDays}
+}
 
-func (v *setupForm) keyHelp() string { return "Tab:next field  Enter:next / connect  Esc:cancel" }
+func (v *setupForm) keyHelp() string { return "Tab:next field  Enter:connect  Esc:cancel" }
 
 func (v *setupForm) draw(a *App, g *ansi.Grid, r rect) {
 	drawText(g, r.x+1, r.y, r.w-1, fgAccent, bgText, "Connect to your BBS")
@@ -377,9 +392,21 @@ func (v *setupForm) draw(a *App, g *ansi.Grid, r rect) {
 		}
 		row += 2
 	}
-	if row < r.y+r.h {
-		drawText(g, r.x+1, row, r.w-1, fgDim, bgText,
-			"Your password is kept in the system's password store, not in a file.")
+	notes := []string{
+		"Keep days: packets whose messages are all read are deleted after",
+		"this many days; 0 keeps everything.",
+		"",
+		"Your password is kept in the system's password store, not in a file.",
+	}
+	if v.havePassword {
+		notes = append(notes, "Leave it empty to keep the one already stored.")
+	}
+	for _, n := range notes {
+		if row >= r.y+r.h {
+			return
+		}
+		drawText(g, r.x+1, row, r.w-1, fgDim, bgText, n)
+		row++
 	}
 }
 
@@ -392,8 +419,12 @@ func (v *setupForm) key(a *App, ev *tcell.EventKey) bool {
 		v.setFocus((v.focus + len(v.fields()) - 1) % len(v.fields()))
 		return true
 	case tcell.KeyEnter:
-		if v.focus < len(v.fields())-1 {
-			v.setFocus(v.focus + 1)
+		// Enter goes on to the next field that still needs typing and
+		// connects once none does: a first run is address, Enter,
+		// name, Enter, password, Enter -- and changing one setting
+		// later is that change and a single Enter.
+		if i := v.nextMissing(); i >= 0 {
+			v.setFocus(i)
 			return true
 		}
 		v.submit(a)
@@ -402,19 +433,46 @@ func (v *setupForm) key(a *App, ev *tcell.EventKey) bool {
 	return v.fields()[v.focus].edit(ev)
 }
 
+// nextMissing is the first empty required field after the focused one,
+// wrapping around, or -1 when all are filled.
+func (v *setupForm) nextMissing() int {
+	required := []*field{&v.url, &v.username, &v.password}
+	if v.havePassword {
+		required = required[:2]
+	}
+	for step := 1; step <= len(required); step++ {
+		i := (v.focus + step) % len(required)
+		if strings.TrimSpace(required[i].String()) == "" {
+			return i
+		}
+	}
+	return -1
+}
+
 func (v *setupForm) submit(a *App) {
 	in := SetupInput{
 		URL:      strings.TrimSpace(v.url.String()),
 		Username: strings.TrimSpace(v.username.String()),
 		Password: v.password.String(),
 	}
-	for i, f := range []string{in.URL, in.Username, in.Password} {
+	required := []string{in.URL, in.Username, in.Password}
+	if v.havePassword {
+		required = required[:2]
+	}
+	for i, f := range required {
 		if f == "" {
 			v.setFocus(i)
 			a.flash = v.fields()[i].label + " is missing."
 			return
 		}
 	}
+	days, err := strconv.Atoi(strings.TrimSpace(v.keepDays.String()))
+	if err != nil || days < 0 || days > maxKeepDays {
+		v.setFocus(3)
+		a.flash = fmt.Sprintf("Keep days must be a number from 0 to %d.", maxKeepDays)
+		return
+	}
+	in.KeepDays = days
 	a.run("Connecting to "+in.URL+"...", func(ctx context.Context) func(*App) {
 		note, err := a.setup(ctx, in)
 		return func(a *App) {
@@ -425,7 +483,7 @@ func (v *setupForm) submit(a *App) {
 			if top, ok := a.top().(*setupForm); ok && top == v {
 				a.pop()
 			}
-			a.setupDefaults = SetupInput{URL: in.URL, Username: in.Username}
+			a.setupDefaults = SetupInput{URL: in.URL, Username: in.Username, KeepDays: in.KeepDays, HavePassword: true}
 			if !a.hasPacket {
 				a.setupNote = note
 				a.startFetch()

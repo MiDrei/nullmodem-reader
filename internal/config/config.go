@@ -36,6 +36,10 @@ type System struct {
 	// Poll is how often the scheduler checks this system for new mail.
 	// Zero disables automatic polling; manual exchange still works.
 	Poll time.Duration `yaml:"poll"`
+	// KeepDays is how long a downloaded packet is kept once every
+	// message in it has been read, and how long a sent reply packet is
+	// kept at all. Zero keeps everything.
+	KeepDays int `yaml:"keep_days,omitempty"`
 }
 
 // Password returns the system's password: the NMR_PASSWORD_<ID>
@@ -173,6 +177,8 @@ func (c Config) validate(path string) error {
 			return fmt.Errorf("config: %s: system %q has no url", path, s.ID)
 		case s.Username == "":
 			return fmt.Errorf("config: %s: system %q has no username", path, s.ID)
+		case s.KeepDays < 0:
+			return fmt.Errorf("config: %s: system %q: keep_days cannot be negative", path, s.ID)
 		}
 		key := strings.ToUpper(s.ID)
 		if seen[key] {
@@ -233,4 +239,7 @@ systems:
     url: https://bbs.example.ch
     username: your-login
     poll: 30m
+    # Delete a packet once everything in it is read and it is older
+    # than this many days; 0 keeps everything.
+    keep_days: 30
 `

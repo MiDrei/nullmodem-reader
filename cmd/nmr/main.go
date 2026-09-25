@@ -449,6 +449,11 @@ func cmdFetch(args []string) error {
 // the server.
 func exchangeOnce(ctx context.Context, client *xfer.Client, cfg config.Config, sys config.System) (sched.Outcome, error) {
 	res, err := exchangeLocked(ctx, client, cfg, sys)
+	if n, perr := prune(cfg, sys, time.Now()); perr != nil {
+		fmt.Fprintln(os.Stderr, "nmr: cleaning up old packets:", perr)
+	} else if n > 0 {
+		fmt.Fprintf(os.Stderr, "nmr: removed %d old packet(s) (keep_days: %d)\n", n, sys.KeepDays)
+	}
 	if len(res.Unmapped) > 0 {
 		// Worth saying, not worth refusing to send over: the message
 		// is still readable, and the user can see what was lost.

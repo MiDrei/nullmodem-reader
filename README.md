@@ -106,7 +106,8 @@ Art auf, die nicht in Zeichenreihenfolge gezeichnet wird.
 
 Fertige Builds liegen unter
 [Releases](https://git.maik.ch/nullmodem/reader/releases): ein Archiv pro
-Plattform mit `nmr` (bzw. `nmr.exe`), dieser README und der Font-Lizenz, dazu
+Plattform mit `nmr` (bzw. `nmr.exe`), dieser README, der Lizenz und der
+Font-Lizenz, dazu
 `SHA256SUMS` zum Prüfen (`sha256sum -c SHA256SUMS`). `nmr version` zeigt,
 welche Version läuft.
 
@@ -313,3 +314,9 @@ go run ./tools/mkfont spleen-8x16-ibm-437.bdf assets/font/cp437-8x16.bin
 Ein Outline-Font käme hier nicht in Frage: Blockgrafik muss auf jeder
 Skalierungsstufe nahtlos kacheln, und das kann nur ein Bitmapfont mit
 ganzzahliger Vergrößerung zusagen.
+
+## Lizenz
+
+MIT — siehe [LICENSE](LICENSE). Der eingebettete Spleen-Font steht unter
+BSD-2-Clause (`assets/font/LICENSE.spleen`); beide Lizenzen liegen jedem
+Release-Archiv bei.

@@ -74,9 +74,9 @@ for target in "${TARGETS[@]}"; do
 	echo "release: building $target"
 	GOWORK=off CGO_ENABLED=0 GOOS=$os GOARCH=$arch \
 		go build -trimpath -ldflags "-s -w -X main.version=$version" -o "$stage/$exe" ./cmd/nmr
-	# The embedded CP437 font is Spleen (BSD-2-Clause): its license
-	# has to travel with every binary.
-	cp README.md "$stage/"
+	# The reader's own license (MIT) and the embedded CP437 font's
+	# (Spleen, BSD-2-Clause) both have to travel with every binary.
+	cp README.md LICENSE "$stage/"
 	cp assets/font/LICENSE.spleen "$stage/"
 	if [[ $os == windows ]]; then
 		(cd "$dist" && python3 -m zipfile -c "$name.zip" "$name/")

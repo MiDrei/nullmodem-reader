@@ -89,3 +89,23 @@ func TestEditingAQueuedMessageOffersNoTagline(t *testing.T) {
 		t.Fatal("an edited message got a second tagline offered")
 	}
 }
+
+func TestNetmailFormOrder(t *testing.T) {
+	h, _ := taglineHarness(t, TaglineNone)
+	h.typ('N')
+	order := []string{"To:", "Address:", "empty for someone on this BBS", "Subject:", "Tagline:"}
+	last := -1
+	for _, want := range order {
+		row := -1
+		for y := 0; y < h.grid.Height; y++ {
+			if strings.Contains(h.row(y), want) {
+				row = y
+				break
+			}
+		}
+		if row <= last {
+			t.Fatalf("%q on row %d, want it below the previous item (row %d):\n%s", want, row, last, h.text())
+		}
+		last = row
+	}
+}

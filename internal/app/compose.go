@@ -322,13 +322,14 @@ func (v *composeForm) draw(a *App, g *ansi.Grid, r rect) {
 			a.cursorX, a.cursorY, a.cursorOn = box.x+min(f.cur, box.w-1), box.y, true
 		}
 		row++
+		if f == &v.address && row < r.y+r.h {
+			// The hint sits right under the field it explains.
+			drawText(g, r.x+11, row, r.w-11, fgDim, bgText,
+				"empty for someone on this BBS, else e.g. 2:301/1")
+			row++
+		}
 	}
 
-	if v.conf.Netmail && row < r.y+r.h {
-		drawText(g, r.x+11, row, r.w-11, fgDim, bgText,
-			"Address: empty for someone on this BBS, else e.g. 2:301/1")
-		row++
-	}
 	if len(v.taglines) > 0 && row < r.y+r.h {
 		drawText(g, r.x+1, row, r.w-1, fgDim, bgText, pad("Tagline:", 10))
 		text, _ := v.tagline()

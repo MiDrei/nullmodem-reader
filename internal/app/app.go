@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -37,6 +38,22 @@ type Options struct {
 	// reader still works, it just cannot remember across sessions --
 	// so a packet opened from a read-only location is still readable.
 	Read *store.ReadState
+
+	// Fetch exchanges mail with the BBS (see session.go). Nil when no
+	// system is configured for this packet, which disables the f key.
+	// It returns an error wrapping ErrNeedsSetup when the login itself
+	// is the problem.
+	Fetch func(ctx context.Context) (FetchResult, error)
+	// Latest opens the newest downloaded packet, to switch to after an
+	// exchange brought one in.
+	Latest func() (Loaded, error)
+	// Setup checks a login against the BBS and saves it, returning a
+	// note for the user (e.g. where the password ended up). Nil
+	// disables the setup screen.
+	Setup func(ctx context.Context, in SetupInput) (note string, err error)
+	// SetupDefaults prefill the setup screen: the configured address
+	// and username. The password is never prefilled.
+	SetupDefaults SetupInput
 }
 
 // App is the reader's interface: state, key handling, and a Grid.
@@ -51,6 +68,23 @@ type App struct {
 	queue *store.Queue
 	read  *store.ReadState
 	from  string
+	// hasPacket is false on the start screen, before any packet is
+	// open (see NewHome).
+	hasPacket bool
+
+	fetch         func(ctx context.Context) (FetchResult, error)
+	latest        func() (Loaded, error)
+	setup         func(ctx context.Context, in SetupInput) (string, error)
+	setupDefaults SetupInput
+	// setupNote waits to be shown after the fetch that setup starts.
+	setupNote string
+
+	// busy names the background work in progress (see run), shown in
+	// the status bar; done carries its outcome back to the frontend's
+	// thread, and cancel stops it.
+	busy   string
+	done   chan func(*App)
+	cancel context.CancelFunc
 
 	// flash is a transient message shown in the status bar instead of
 	// the key hints, cleared by the next keypress.
@@ -71,24 +105,39 @@ type App struct {
 	// the editor then runs on top of whatever is on screen.
 	Suspend func() error
 	Resume  func() error
+	// Wake asks the frontend to render again. A frontend that only
+	// draws after input (the terminal) sets it, so the outcome of
+	// background work shows up without a keypress.
+	Wake func()
 }
 
 // New builds the reader's interface over an opened packet.
 func New(path string, p *qwk.Packet, opts Options) (*App, error) {
-	a := &App{m: newModel(path, p), queue: opts.Queue, read: opts.Read, from: opts.From}
+	a := newApp(opts)
+	a.m, a.hasPacket = newModel(path, p), true
 	if a.from == "" {
 		a.from = a.m.caller
-	}
-	if a.read == nil {
-		// An in-memory state keeps every view free of nil checks; it
-		// simply has nowhere to save to.
-		a.read = store.NewReadState()
 	}
 	if len(a.m.conferences) == 0 && a.m.welcome == nil {
 		return nil, fmt.Errorf("app: %s holds no messages", path)
 	}
 	a.push(newAreaList(a.m))
 	return a, nil
+}
+
+func newApp(opts Options) *App {
+	a := &App{
+		queue: opts.Queue, read: opts.Read, from: opts.From,
+		fetch: opts.Fetch, latest: opts.Latest,
+		setup: opts.Setup, setupDefaults: opts.SetupDefaults,
+		done: make(chan func(*App), 1),
+	}
+	if a.read == nil {
+		// An in-memory state keeps every view free of nil checks; it
+		// simply has nowhere to save to.
+		a.read = store.NewReadState()
+	}
+	return a
 }
 
 // Quit reports whether the user has asked to leave.
@@ -121,6 +170,15 @@ func (a *App) top() view { return a.stack[len(a.stack)-1] }
 
 // HandleKey applies one keypress.
 func (a *App) HandleKey(ev *tcell.EventKey) {
+	a.settle()
+	if a.busy != "" {
+		// Nothing else may start while an exchange runs; quitting
+		// still works and abandons it.
+		if ev.Key() == tcell.KeyCtrlC || ev.Rune() == 'Q' {
+			a.quit = true
+		}
+		return
+	}
 	a.flash = ""
 
 	if a.help {
@@ -149,11 +207,16 @@ func (a *App) HandleKey(ev *tcell.EventKey) {
 		a.quit = true
 	case ev.Rune() == '?':
 		a.help = true
+	case ev.Rune() == 'f' && a.fetch != nil:
+		a.startFetch()
+	case ev.Rune() == 's' && a.setup != nil:
+		a.openSetup()
 	}
 }
 
 // Render composes the whole interface into a w by h grid.
 func (a *App) Render(w, h int) ansi.Grid {
+	a.settle()
 	g := ansi.NewGrid(max(w, 1), max(h, 1))
 	a.width, a.height = w, h
 	a.cursorOn = false
@@ -176,6 +239,10 @@ func (a *App) Render(w, h int) ansi.Grid {
 
 func (a *App) drawHeader(g *ansi.Grid, w int) {
 	fill(g, rect{0, 0, w, 1}, fgBar, bgBar)
+	if !a.hasPacket {
+		drawText(g, 0, 0, w, fgBar, bgBar, " NullModem Reader")
+		return
+	}
 	left := " " + a.m.title()
 	if a.m.caller != "" {
 		left += "  for " + a.m.caller
@@ -198,9 +265,19 @@ func (a *App) drawHeader(g *ansi.Grid, w int) {
 func (a *App) drawStatus(g *ansi.Grid, w, h int) {
 	fg, bg := fgBar, bgBar
 	text := a.flash
-	if text == "" {
-		text = a.top().keyHelp() + "  ?:help"
-	} else {
+	switch {
+	case a.busy != "":
+		text = a.busy
+		if a.flash != "" {
+			text += "  " + a.flash
+		}
+	case text == "":
+		text = a.top().keyHelp()
+		if _, isHome := a.top().(*homeView); !isHome && !a.inForm() && a.fetch != nil {
+			text += "  f:fetch"
+		}
+		text += "  ?:help"
+	default:
 		// A flash is either a confirmation or a refusal, and both are
 		// worth a colour the eye catches without reading first.
 		fg, bg = fgWarn, bgWarn
@@ -223,6 +300,10 @@ var helpLines = []string{
 	"  Conferences",
 	"    w              welcome screen",
 	"    o              pending replies",
+	"",
+	"  Mail",
+	"    f              send replies and fetch new mail",
+	"    s              set up or change the BBS login",
 	"",
 	"  Messages",
 	"    e              write a new message here",
@@ -251,6 +332,16 @@ func (a *App) drawHelp(g *ansi.Grid, w, h int) {
 		}
 		drawText(g, x, y+1+i, boxW, fgSelected, bgSelected, l)
 	}
+}
+
+// inForm reports whether a text form has the keyboard, where letters
+// are typed rather than acting as commands.
+func (a *App) inForm() bool {
+	switch a.top().(type) {
+	case *composeForm, *setupForm:
+		return true
+	}
+	return false
 }
 
 // contentWidth is how wide a message body should be laid out: the

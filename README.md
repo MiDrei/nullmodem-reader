@@ -82,6 +82,9 @@ Art auf, die nicht in Zeichenreihenfolge gezeichnet wird.
 - **GUI** (Ebitengine): eigenes Fenster mit eingebettetem CP437-8×16-Font,
   ganzzahlige Skalierung, DOS-Palette. Dieselbe Oberfläche wie im Terminal,
   nur pixelgenau — Blockgrafik kachelt nahtlos.
+- **Einrichtung und Austausch im Reader**: Einrichtungsdialog beim ersten
+  Start, `f` tauscht Post im Hintergrund aus, Passwort im Schlüsselbund des
+  Systems — siehe *Erster Start ohne Kommandozeile*
 - **Scheduler**: `nmr daemon` tauscht nach Zeitplan aus — pro System eigenes
   Intervall, Jitter gegen gleichzeitige Zugriffe, exponentielles Backoff bei
   Ausfällen (gedeckelt bei einer Stunde), Dateisperre gegen Doppelläufe.
@@ -91,8 +94,10 @@ Art auf, die nicht in Zeichenreihenfolge gezeichnet wird.
 
 **Offen**
 
-- Nichts Geplantes mehr. `bbskit/zmodem` liegt ungenutzt bereit, falls die
-  serielle Strecke doch einmal gebraucht wird.
+- Einfügen aus der Zwischenablage (Strg+V) im Fenster -- Ebitengine hat
+  keinen Zugriff darauf, Adresse und Passwort müssen getippt werden.
+- `bbskit/zmodem` liegt ungenutzt bereit, falls die serielle Strecke doch
+  einmal gebraucht wird.
 
 ## Installieren
 
@@ -107,8 +112,27 @@ welche Version läuft.
   der Terminal-Modus braucht beides nicht.
 - **macOS**: die Binaries sind nicht signiert. Nach dem Download einmal
   `xattr -d com.apple.quarantine nmr`, sonst blockiert Gatekeeper den Start.
-- **Windows**: `nmr.exe` ist ein Konsolenprogramm; `nmr gui` öffnet
-  zusätzlich ein Fenster.
+- **Windows**: Doppelklick auf `nmr.exe` öffnet direkt das Fenster. Beim
+  ersten Start fragt es nach BBS-Adresse, Benutzername und Passwort, prüft
+  die Anmeldung und holt gleich die erste Post. Aus einer Eingabeaufforderung
+  heraus funktionieren weiterhin alle Befehle unten.
+
+### Erster Start ohne Kommandozeile
+
+`nmr gui` (unter Windows auch der Doppelklick) und `nmr open` brauchen kein
+Paket als Argument: Ist noch nichts eingerichtet, erscheint der
+Einrichtungsdialog; ist eingerichtet, aber noch nichts heruntergeladen, holt
+der Reader sofort Post; sonst öffnet er das neueste Paket.
+
+Im Reader tauscht `f` Post aus — Antworten senden, neue Post holen, auf das
+neue Paket wechseln — ohne dass das Fenster hängt. `s` öffnet die Einrichtung
+erneut, etwa nach einem Passwortwechsel. Lehnt die BBS die Anmeldung ab, führt
+der Reader von selbst dorthin.
+
+Das Passwort landet im Passwortspeicher des Systems (Windows-
+Anmeldeinformationsverwaltung, macOS-Schlüsselbund, Secret Service unter
+Linux). Wo es keinen gibt, schreibt der Dialog es in die Konfigurationsdatei
+und sagt das. `NMR_PASSWORD_<ID>` in der Umgebung hat weiterhin Vorrang.
 
 Oder aus dem Quelltext: `go install git.maik.ch/nullmodem/reader/cmd/nmr@latest`
 (mit `GOPRIVATE` wie oben).
@@ -141,8 +165,8 @@ go run ./cmd/nmr gui  testdata/SAMPLE.QWK     # im eigenen Fenster
 
 Tasten: `↑↓`/`jk` bewegen, `Enter` öffnen, `Esc`/`q` zurück, `w` Welcome-Screen,
 `n`/`p` nächste/vorige Nachricht, `space` blättern, `r` antworten, `e` neu
-schreiben, `m` Konferenz als gelesen markieren, `o` Warteschlange, `?` Hilfe,
-`Q` beenden.
+schreiben, `m` Konferenz als gelesen markieren, `o` Warteschlange, `f` Post
+austauschen, `s` Einrichtung, `?` Hilfe, `Q` beenden.
 
 Ohne Vollbild:
 
@@ -155,7 +179,13 @@ go run ./cmd/nmr read   testdata/SAMPLE.QWK
 Gegen eine echte BBS:
 
 ```
-go run ./cmd/nmr init          # schreibt die Konfiguration
+go run ./cmd/nmr gui           # Einrichtungsdialog, dann die erste Post
+```
+
+oder ganz ohne Fenster:
+
+```
+go run ./cmd/nmr init          # schreibt eine Beispielkonfiguration
 export NMR_PASSWORD_NULLMDM=…  # Passwort nicht in die Datei
 go run ./cmd/nmr fetch
 go run ./cmd/nmr open            # das zuletzt geholte Paket

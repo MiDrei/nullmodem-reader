@@ -17,7 +17,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 
 	"git.maik.ch/nullmodem/kit/ansi"
-	"git.maik.ch/nullmodem/kit/qwk"
 	"git.maik.ch/nullmodem/reader/internal/app"
 )
 
@@ -44,14 +43,9 @@ var dosColors = func() [16]tcell.Color {
 	return out
 }()
 
-// Run opens the packet in a full-screen terminal reader and returns
-// when the user quits.
-func Run(path string, p *qwk.Packet, opts app.Options) error {
-	a, err := app.New(path, p, opts)
-	if err != nil {
-		return err
-	}
-
+// Run shows the reader full-screen in the terminal and returns when
+// the user quits.
+func Run(a *app.App) error {
 	screen, err := tcell.NewScreen()
 	if err != nil {
 		return fmt.Errorf("tui: opening the terminal: %w", err)
@@ -74,8 +68,12 @@ func Run(path string, p *qwk.Packet, opts app.Options) error {
 		return nil
 	}
 
+	// PollEvent blocks until input arrives; an interrupt event makes
+	// the loop render the outcome of background work right away.
+	a.Wake = func() { _ = screen.PostEvent(tcell.NewEventInterrupt(nil)) }
+
 	defer func() {
-		if err := a.Save(); err != nil {
+		if err := a.Close(); err != nil {
 			fmt.Fprintln(os.Stderr, "nmr: could not save read markers:", err)
 		}
 	}()

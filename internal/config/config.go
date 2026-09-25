@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zalando/go-keyring"
 	"gopkg.in/yaml.v3"
 )
 
@@ -27,23 +28,27 @@ type System struct {
 	Username string `yaml:"username"`
 	// Password is deliberately optional here. Putting it in a config
 	// file means it sits in cleartext on disk and in every backup, so
-	// the reader prefers the NMR_PASSWORD_<ID> environment variable
-	// and only falls back to this field when that is unset -- see
-	// Password. It is never written back out by the reader and never
-	// logged.
+	// the reader prefers the NMR_PASSWORD_<ID> environment variable,
+	// then the system keychain, and only falls back to this field when
+	// neither has one -- see Password. The reader writes it only when
+	// setup finds no keychain to store it in, and never logs it.
 	PasswordInFile string `yaml:"password,omitempty"`
 	// Poll is how often the scheduler checks this system for new mail.
 	// Zero disables automatic polling; manual exchange still works.
 	Poll time.Duration `yaml:"poll"`
 }
 
-// Password returns the system's password, preferring the
-// NMR_PASSWORD_<ID> environment variable over the config file. The
-// second return value reports whether one was found at all -- an
-// empty password is not a usable one, and the caller should say so
-// rather than sending a blank login.
+// Password returns the system's password: the NMR_PASSWORD_<ID>
+// environment variable first, then the system keychain (see
+// StorePassword), then the config file. The second return value
+// reports whether one was found at all -- an empty password is not a
+// usable one, and the caller should say so rather than sending a
+// blank login.
 func (s System) Password() (string, bool) {
-	if v, ok := os.LookupEnv("NMR_PASSWORD_" + strings.ToUpper(s.ID)); ok && v != "" {
+	if v, ok := os.LookupEnv(s.PasswordEnv()); ok && v != "" {
+		return v, true
+	}
+	if v, err := keyring.Get(keyringService, s.keyringAccount()); err == nil && v != "" {
 		return v, true
 	}
 	if s.PasswordInFile != "" {
@@ -52,11 +57,35 @@ func (s System) Password() (string, bool) {
 	return "", false
 }
 
+// PasswordEnv is the environment variable Password checks first.
+func (s System) PasswordEnv() string { return "NMR_PASSWORD_" + strings.ToUpper(s.ID) }
+
+// keyringService is the name the reader's entries carry in the
+// system keychain (Windows Credential Manager, macOS Keychain, the
+// Secret Service on Linux).
+const keyringService = "NullModem Reader"
+
+// keyringAccount keys the entry by system and login, so changing the
+// username in the config doesn't silently reuse the old login's
+// password.
+func (s System) keyringAccount() string { return strings.ToUpper(s.ID) + "/" + s.Username }
+
+// StorePassword puts the password into the system keychain. It fails
+// where there is none (a Linux box without a Secret Service, say);
+// the caller then decides whether the config file is an acceptable
+// place instead.
+func (s System) StorePassword(password string) error {
+	if err := keyring.Set(keyringService, s.keyringAccount(), password); err != nil {
+		return fmt.Errorf("config: storing the password in the system keychain: %w", err)
+	}
+	return nil
+}
+
 // Config is the whole configuration file.
 type Config struct {
 	// DataDir holds downloaded packets, outgoing replies and read
 	// state. Empty means the platform default (see DefaultDataDir).
-	DataDir string   `yaml:"data_dir"`
+	DataDir string   `yaml:"data_dir,omitempty"`
 	Systems []System `yaml:"systems"`
 }
 
@@ -154,13 +183,47 @@ func (c Config) validate(path string) error {
 	return nil
 }
 
+// Save writes c to path (DefaultPath when empty), creating the
+// directory. The file is 0600 since it may hold a password.
+func Save(path string, c Config) error {
+	if path == "" {
+		p, err := DefaultPath()
+		if err != nil {
+			return err
+		}
+		path = p
+	}
+	if err := c.validate(path); err != nil {
+		return err
+	}
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("config: encoding: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("config: creating %s: %w", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, append([]byte(header), data...), 0o600); err != nil {
+		return fmt.Errorf("config: writing %s: %w", path, err)
+	}
+	return nil
+}
+
+// header opens a config file the reader wrote itself.
+const header = `# NullModem Reader configuration, written by the setup screen.
+# The password lives in the system keychain unless a password: line
+# says otherwise; NMR_PASSWORD_<ID> in the environment overrides both.
+
+`
+
 // Example is a starter configuration, written on first run so the
 // user has something to edit rather than a blank file.
 const Example = `# QWKReader configuration.
 #
 # The password is best kept out of this file: the reader reads
-# NMR_PASSWORD_<ID> from the environment first and only falls back to
-# a password: line here.
+# NMR_PASSWORD_<ID> from the environment first, then the system
+# keychain (filled by the setup screen of "nmr gui"), and only falls
+# back to a password: line here.
 
 # data_dir: ~/.nmr
 

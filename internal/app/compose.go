@@ -19,6 +19,8 @@ type field struct {
 	label string
 	value []rune
 	cur   int
+	// mask shows the value as asterisks, for a password.
+	mask bool
 }
 
 func newField(label, value string) field {
@@ -27,6 +29,14 @@ func newField(label, value string) field {
 }
 
 func (f *field) String() string { return string(f.value) }
+
+// display is what the field shows on screen.
+func (f *field) display() string {
+	if f.mask {
+		return strings.Repeat("*", len(f.value))
+	}
+	return f.String()
+}
 
 // edit applies one keypress, reporting whether it was consumed.
 // Anything it does not consume falls through to the form's own
@@ -234,8 +244,17 @@ func (a *App) writeAndQueue(v *composeForm) {
 
 	a.pop()
 	n, _ := a.queue.Len()
-	a.flash = fmt.Sprintf("Queued for %s (%d waiting) -- run \"nmr fetch\" to send. [%s]",
-		v.conf.Name, n, stored.ID)
+	a.flash = fmt.Sprintf("Queued for %s (%d waiting) -- %s. [%s]",
+		v.conf.Name, n, a.sendHint(), stored.ID)
+}
+
+// sendHint says how queued messages go out: from inside the reader
+// when it can exchange mail, otherwise from the command line.
+func (a *App) sendHint() string {
+	if a.fetch != nil {
+		return "press f to send"
+	}
+	return "run \"nmr fetch\" to send"
 }
 
 // runEditor hands the display to the user's editor and takes it back
@@ -325,7 +344,7 @@ func (v *outbox) draw(a *App, g *ansi.Grid, r rect) {
 	}
 
 	drawText(g, r.x+1, r.y, r.w-1, fgAccent, bgText,
-		strconv.Itoa(len(v.replies))+" message(s) waiting -- \"nmr fetch\" sends them")
+		strconv.Itoa(len(v.replies))+" message(s) waiting -- "+a.sendHint())
 
 	body := rect{r.x, r.y + 2, r.w, r.h - 2}
 	v.follow(body.h)

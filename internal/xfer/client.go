@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -159,6 +160,43 @@ func (c *Client) SetAreas(ctx context.Context, ids []int64) error {
 // scheduled exchange, not a failure.
 var ErrNoNewMail = fmt.Errorf("xfer: no new mail")
 
+// ErrUnauthorized is returned when the BBS rejects the login or the
+// token -- a wrong password, as far as the user is concerned.
+var ErrUnauthorized = errors.New("xfer: not authorized")
+
+// Info asks the BBS for its name. It needs no login, so setup can show
+// which system it reached before a password is checked.
+func (c *Client) Info(ctx context.Context) (name string, err error) {
+	req, err := c.newRequest(ctx, http.MethodGet, "/api/bbs/info", nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := c.httpClient().Do(req)
+	if err != nil {
+		return "", fmt.Errorf("xfer: reaching %s: %w", c.BaseURL, err)
+	}
+	defer resp.Body.Close()
+	if err := expectStatus(resp, http.StatusOK); err != nil {
+		return "", err
+	}
+	var out struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&out); err != nil {
+		return "", fmt.Errorf("xfer: %s does not look like a NullModem BBS: %w", c.BaseURL, err)
+	}
+	return out.Name, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 // DownloadQWK fetches the caller's current packet into dir and
 // returns the path it was written to. The filename comes from the
 // server's Content-Disposition (conventionally <BBSID>.QWK), with a
@@ -289,6 +327,11 @@ func expectStatus(resp *http.Response, want ...int) error {
 	}
 	var payload struct {
 		Error string `json:"error"`
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
+		_ = json.Unmarshal(data, &payload)
+		return fmt.Errorf("%w: %s", ErrUnauthorized, firstNonEmpty(payload.Error, "HTTP 401"))
 	}
 	// Bounded: an error body is a short JSON object, and a server
 	// misbehaving badly enough to stream megabytes here should not

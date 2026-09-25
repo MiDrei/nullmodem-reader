@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -35,6 +36,8 @@ const usage = `nmr -- QWK(E) offline reader
 
   nmr open    [packet.qwk]        read a packet in the terminal
   nmr gui     [packet.qwk]        read a packet in a window (CP437 bitmap font)
+                                  without a packet: the newest one, or first-run
+                                  setup and fetching when there is none yet
   nmr daemon  [-s ID]             exchange on a schedule until stopped
   nmr outbox  [-s ID]             list the replies waiting to be sent
   nmr init                        write a starter configuration
@@ -75,6 +78,14 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
+		if runtime.GOOS == "windows" {
+			// Started by double-clicking nmr.exe: Ebitengine hides the
+			// console window that would have shown the usage text, so
+			// a printed usage would look like nothing happened at all.
+			// Open the reader window instead, which walks a first-time
+			// user through setup.
+			return cmdOpen(true, nil)
+		}
 		fmt.Print(usage)
 		return nil
 	}
@@ -125,25 +136,44 @@ func cmdOpen(window bool, args []string) error {
 	if err != nil {
 		return err
 	}
-
-	var path string
-	switch len(positional) {
-	case 0:
-		// No packet named: open the newest one already downloaded, so
-		// "nmr fetch && nmr open" is the whole daily routine.
-		path, err = newestPacket(*configPath, *systemID)
-		if err != nil {
-			return err
-		}
-	case 1:
-		path = positional[0]
-	default:
+	if len(positional) > 1 {
 		return fmt.Errorf("usage: nmr %s [packet.qwk]", name)
 	}
 
+	sess := session{configPath: *configPath, systemID: *systemID}
+	opts := sess.options()
+
+	var a *app.App
+	if len(positional) == 1 {
+		a, err = openPacket(positional[0], sess, opts)
+		if err != nil {
+			return err
+		}
+	} else {
+		// No packet named: open the newest one already downloaded, so
+		// "nmr fetch && nmr open" is the whole daily routine -- or, on
+		// a first run, set up and fetch from inside the reader.
+		a, err = sess.start(opts)
+		if err != nil {
+			if !window {
+				return err
+			}
+			// A window may have been opened by double-click, with no
+			// console to print to: show the problem in the window.
+			a = app.NewHome(opts, app.HomeIdle, err.Error())
+		}
+	}
+	if window {
+		return gui.Run(a)
+	}
+	return tui.Run(a)
+}
+
+// openPacket opens a packet named on the command line.
+func openPacket(path string, sess session, opts app.Options) (*app.App, error) {
 	p, err := qwk.OpenPacket(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer p.Close()
 
@@ -151,30 +181,24 @@ func cmdOpen(window bool, args []string) error {
 	// remembered read markers, not the read itself: someone who just
 	// wants to catch up on their mail should not be blocked by a
 	// writable-directory problem.
-	q, read, from, ctxErr := packetContext(*configPath, *systemID, p)
+	q, read, from, ctxErr := packetContext(sess.configPath, sess.systemID, p)
 	if ctxErr != nil {
 		fmt.Fprintln(os.Stderr, "nmr: replies and read markers are disabled:", ctxErr)
 	}
-	opts := app.Options{Queue: q, Read: read, From: from}
-	if window {
-		return gui.Run(path, p, opts)
-	}
-	return tui.Run(path, p, opts)
+	opts.Queue, opts.Read, opts.From = q, read, from
+	return app.New(path, p, opts)
 }
 
-// newestPacket finds the most recently downloaded packet for a
-// system, by modification time.
-func newestPacket(configPath, systemID string) (string, error) {
-	cfg, sys, err := loadSystem(configPath, systemID)
-	if err != nil {
-		return "", err
-	}
-	dir := systemDirs(cfg, sys).down
+// errNoPacket means nothing has been downloaded yet.
+var errNoPacket = errors.New("no packets downloaded yet")
 
+// newestPacket finds the most recently downloaded packet in dir, by
+// modification time.
+func newestPacket(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", fmt.Errorf("no packets downloaded yet -- run \"nmr fetch\" first")
+			return "", errNoPacket
 		}
 		return "", fmt.Errorf("reading %s: %w", dir, err)
 	}
@@ -194,7 +218,7 @@ func newestPacket(configPath, systemID string) (string, error) {
 		}
 	}
 	if newest == "" {
-		return "", fmt.Errorf("no packet in %s -- run \"nmr fetch\" first", dir)
+		return "", errNoPacket
 	}
 	return newest, nil
 }
@@ -232,7 +256,7 @@ func cmdDaemon(args []string) error {
 			continue
 		}
 		if _, ok := sys.Password(); !ok {
-			return fmt.Errorf("no password for %s -- set NMR_PASSWORD_%s", sys.ID, strings.ToUpper(sys.ID))
+			return noPasswordError(sys)
 		}
 
 		// One client per system, reused across exchanges: it holds the
@@ -417,40 +441,53 @@ func cmdFetch(args []string) error {
 // queued replies twice and race each other's read-state updates on
 // the server.
 func exchangeOnce(ctx context.Context, client *xfer.Client, cfg config.Config, sys config.System) (sched.Outcome, error) {
+	res, err := exchangeLocked(ctx, client, cfg, sys)
+	if len(res.Unmapped) > 0 {
+		// Worth saying, not worth refusing to send over: the message
+		// is still readable, and the user can see what was lost.
+		fmt.Fprintln(os.Stderr, "nmr:", unmappedNote(res.Unmapped))
+	}
+	return sched.Outcome{Sent: res.Sent, Received: res.Received, NoNewMail: res.NoNewMail()}, err
+}
+
+func unmappedNote(unmapped []rune) string {
+	return fmt.Sprintf("%d character(s) have no CP437 equivalent and were sent as '?': %s",
+		len(unmapped), string(unmapped))
+}
+
+// exchangeLocked is exchangeOnce without the reporting, for callers
+// that show the outcome their own way (the reader window).
+func exchangeLocked(ctx context.Context, client *xfer.Client, cfg config.Config, sys config.System) (exchange.Result, error) {
 	d := systemDirs(cfg, sys)
 
 	lock, err := exchange.Acquire(d.lock)
 	if err != nil {
 		if errors.Is(err, exchange.ErrLocked) {
-			return sched.Outcome{}, fmt.Errorf("%w: %v", sched.ErrSkipped, err)
+			return exchange.Result{}, fmt.Errorf("%w: %v", sched.ErrSkipped, err)
 		}
-		return sched.Outcome{}, err
+		return exchange.Result{}, err
 	}
 	defer lock.Release()
 
 	if !client.LoggedIn() {
 		password, ok := sys.Password()
 		if !ok {
-			return sched.Outcome{}, fmt.Errorf("no password for %s -- set NMR_PASSWORD_%s", sys.ID, strings.ToUpper(sys.ID))
+			return exchange.Result{}, noPasswordError(sys)
 		}
 		if err := client.Login(ctx, password); err != nil {
-			return sched.Outcome{}, err
+			return exchange.Result{}, err
 		}
 	}
 
 	q, err := store.OpenQueue(d.pending)
 	if err != nil {
-		return sched.Outcome{}, err
+		return exchange.Result{}, err
 	}
+	return exchange.Run(ctx, client, q, sys.ID, exchange.Dirs{Down: d.down, Up: d.up})
+}
 
-	res, err := exchange.Run(ctx, client, q, sys.ID, exchange.Dirs{Down: d.down, Up: d.up})
-	if len(res.Unmapped) > 0 {
-		// Worth saying, not worth refusing to send over: the message
-		// is still readable, and the user can see what was lost.
-		fmt.Fprintf(os.Stderr, "nmr: %d character(s) have no CP437 equivalent and were sent as '?': %s\n",
-			len(res.Unmapped), string(res.Unmapped))
-	}
-	return sched.Outcome{Sent: res.Sent, Received: res.Received, NoNewMail: res.NoNewMail()}, err
+func noPasswordError(sys config.System) error {
+	return fmt.Errorf("no password for %s -- run \"nmr gui\" and press s to store one, or set %s", sys.ID, sys.PasswordEnv())
 }
 
 // --------------------------------------------------------------- areas
@@ -706,7 +743,7 @@ func loadSystem(configPath, id string) (config.Config, config.System, error) {
 func login(ctx context.Context, sys config.System) (*xfer.Client, error) {
 	password, ok := sys.Password()
 	if !ok {
-		return nil, fmt.Errorf("no password for %s -- set NMR_PASSWORD_%s", sys.ID, strings.ToUpper(sys.ID))
+		return nil, noPasswordError(sys)
 	}
 	client := xfer.New(sys.URL, sys.Username)
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)

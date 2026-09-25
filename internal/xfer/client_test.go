@@ -30,6 +30,10 @@ func (f *fakeBBS) handler(t *testing.T) http.Handler {
 	t.Helper()
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("GET /api/bbs/info", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"name":"NullModem BBS"}`)
+	})
 	mux.HandleFunc("POST /api/bbs/auth/login", func(w http.ResponseWriter, r *http.Request) {
 		var req struct{ Username, Password string }
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -250,5 +254,38 @@ func TestPacketFilenameRefusesTraversal(t *testing.T) {
 func TestPacketFilenameAcceptsAnOrdinaryName(t *testing.T) {
 	if got := packetFilename(`attachment; filename="NULLMDM.QWK"`, "alice"); got != "NULLMDM.QWK" {
 		t.Fatalf("packetFilename = %q, want NULLMDM.QWK", got)
+	}
+}
+
+func TestInfoNeedsNoLogin(t *testing.T) {
+	c, _ := newTestClient(t, &fakeBBS{token: "tok-123"})
+	name, err := c.Info(context.Background())
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	if name != "NullModem BBS" {
+		t.Fatalf("name = %q", name)
+	}
+}
+
+func TestInfoRejectsSomethingThatIsNotABBS(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "<html>a web page</html>")
+	}))
+	t.Cleanup(srv.Close)
+	c := New(srv.URL, "alice")
+	if _, err := c.Info(context.Background()); err == nil {
+		t.Fatal("Info against a plain web page should fail")
+	}
+}
+
+func TestWrongPasswordIsErrUnauthorized(t *testing.T) {
+	c, _ := newTestClient(t, &fakeBBS{token: "tok-123"})
+	err := c.Login(context.Background(), "wrong")
+	if !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("err = %v, want ErrUnauthorized", err)
+	}
+	if !strings.Contains(err.Error(), "invalid username or password") {
+		t.Fatalf("err = %v, want the server's message kept", err)
 	}
 }

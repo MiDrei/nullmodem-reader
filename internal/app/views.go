@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -82,6 +83,17 @@ func (v *areaList) keyHelp() string {
 }
 
 func (v *areaList) draw(a *App, g *ansi.Grid, r rect) {
+	unreadTotal := 0
+	for _, c := range v.m.conferences {
+		unreadTotal += a.read.UnreadCount(c.Number, c.Numbers())
+	}
+	summary := "no unread mail"
+	if unreadTotal > 0 {
+		summary = strconv.Itoa(unreadTotal) + " unread"
+	}
+	r = listFrame(g, r, "Conferences", summary,
+		"   "+pad("#", 5)+pad("Conference", max(r.w-28, 10))+"     "+pad("Messages", 12))
+
 	v.follow(r.h)
 	for i := 0; i < r.h; i++ {
 		idx := i + v.scroll
@@ -185,7 +197,6 @@ func (v *messageList) keyHelp() string {
 }
 
 func (v *messageList) draw(a *App, g *ansi.Grid, r rect) {
-	v.follow(r.h)
 
 	// Column widths: the date is fixed, the sender gets a quarter of
 	// what is left, and the subject takes the rest -- it is the field
@@ -193,6 +204,18 @@ func (v *messageList) draw(a *App, g *ansi.Grid, r rect) {
 	dateW := 11
 	fromW := clamp((r.w-dateW)/4, 8, 22)
 	subjW := max(r.w-dateW-fromW-5, 10)
+
+	unread := a.read.UnreadCount(v.conf.Number, v.conf.Numbers())
+	summary := strconv.Itoa(len(v.conf.Messages)) + " messages"
+	if len(v.conf.Messages) == 1 {
+		summary = "1 message"
+	}
+	if unread > 0 {
+		summary += ", " + strconv.Itoa(unread) + " unread"
+	}
+	r = listFrame(g, r, v.conf.Name, summary,
+		"    "+pad("From", fromW)+" "+pad("Subject", subjW)+" "+pad("Date", dateW))
+	v.follow(r.h)
 
 	for i := 0; i < r.h; i++ {
 		idx := i + v.scroll
@@ -350,7 +373,15 @@ func (v *messageView) key(a *App, ev *tcell.EventKey) bool {
 		v.scroll++
 	case ev.Key() == tcell.KeyPgUp:
 		v.scroll -= page
-	case ev.Key() == tcell.KeyPgDn, ev.Rune() == ' ':
+	case ev.Key() == tcell.KeyPgDn:
+		v.scroll += page
+	case ev.Rune() == ' ':
+		// Space reads on: a page at a time, then the next message --
+		// a whole conference with one key, as the old readers did.
+		if v.scroll+a.bodyHeight() >= v.grid.Height+len(v.headerLines())+2 {
+			v.step(1, a)
+			return true
+		}
 		v.scroll += page
 	case ev.Key() == tcell.KeyHome:
 		v.scroll = 0
@@ -373,8 +404,12 @@ func (v *messageView) key(a *App, ev *tcell.EventKey) bool {
 // silently doing nothing at either end.
 func (v *messageView) step(delta int, a *App) {
 	next := v.index + delta
-	if next < 0 || next >= len(v.conf.Messages) {
-		a.flash = "No further message in " + v.conf.Name + "."
+	if next >= len(v.conf.Messages) {
+		a.endOfConference(v.conf)
+		return
+	}
+	if next < 0 {
+		a.flash = "This is the first message in " + v.conf.Name + "."
 		return
 	}
 	v.index = next
@@ -473,4 +508,47 @@ func (a *App) compose(form *composeForm) {
 	}
 	form.offerTaglines(a.taglines, a.taglineChoice)
 	a.push(form)
+}
+
+// listFrame draws a list's title line, its column headings and a rule
+// under them, and returns the rows left for the list itself -- so a
+// list does not start right under the header bar with nothing to say
+// what its columns are.
+func listFrame(g *ansi.Grid, r rect, title, summary, headings string) rect {
+	x := drawText(g, r.x+1, r.y, r.w-1, fgAccent, bgText, title)
+	if summary != "" {
+		drawText(g, x, r.y, r.x+r.w-x, fgDim, bgText, "  \u00b7  "+summary)
+	}
+	drawText(g, r.x, r.y+1, r.w, fgDim, bgText, headings)
+	drawText(g, r.x+1, r.y+2, r.w-1, fgDim, bgText, strings.Repeat("\u2500", max(r.w-2, 0)))
+	return rect{x: r.x, y: r.y + 3, w: r.w, h: max(r.h-3, 0)}
+}
+
+// endOfConference leaves a conference read to its end: back to the
+// conference list with the next one holding unread mail selected, so
+// Enter goes straight on -- rather than a dead end at the last message.
+func (a *App) endOfConference(done Conference) {
+	a.stack = a.stack[:1]
+	list, ok := a.stack[0].(*areaList)
+	if !ok {
+		return
+	}
+	confs := list.m.conferences
+	at := 0
+	for i, c := range confs {
+		if c.Number == done.Number {
+			at = i
+		}
+	}
+	for step := 1; step <= len(confs); step++ {
+		i := (at + step) % len(confs)
+		c := confs[i]
+		if n := a.read.UnreadCount(c.Number, c.Numbers()); n > 0 {
+			list.sel = i
+			a.flash = fmt.Sprintf("End of %s. Next with unread mail: %s (%d) -- Enter opens it.", done.Name, c.Name, n)
+			return
+		}
+	}
+	list.sel = at
+	a.flash = "End of " + done.Name + ". No unread mail left."
 }

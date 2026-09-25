@@ -20,6 +20,10 @@ import (
 
 const testWidth, testHeight = 80, 24
 
+// listTop is the first row of a conference or message list: under the
+// header bar, the list's title, its column headings and the rule.
+const listTop = 4
+
 // welcomeArt is a miniature CP437/ANSI screen: box-drawing glyphs,
 // colors, and a cursor jump that only lands correctly once the bytes
 // have been through the Grid.
@@ -266,10 +270,10 @@ func TestConferencesAreSortedByNumberWithCounts(t *testing.T) {
 	h := newHarness(t)
 
 	// Row 1 is the first content row, under the header bar.
-	if got := h.row(1); !strings.Contains(got, "Personal") || !strings.Contains(got, "1 msg") {
+	if got := h.row(listTop); !strings.Contains(got, "Personal") || !strings.Contains(got, "1 msg") {
 		t.Fatalf("first row = %q, want conference 0 with its count", got)
 	}
-	if got := h.row(2); !strings.Contains(got, "Go Programming") || !strings.Contains(got, "2 msg") {
+	if got := h.row(listTop+1); !strings.Contains(got, "Go Programming") || !strings.Contains(got, "2 msg") {
 		t.Fatalf("second row = %q, want conference 3 with its count", got)
 	}
 }
@@ -307,13 +311,13 @@ func TestUnreadAndPrivateAreMarkedIndependently(t *testing.T) {
 	h := newHarness(t)
 	h.enter() // Personal, holding the one private message
 
-	if got := h.row(1); !strings.HasPrefix(got, " \u2022*") {
+	if got := h.row(listTop); !strings.HasPrefix(got, " \u2022*") {
 		t.Fatalf("row = %q, want it marked both unread and private", got)
 	}
 
 	h.enter() // read it
 	h.esc()
-	if got := h.row(1); !strings.HasPrefix(got, "  *") {
+	if got := h.row(listTop); !strings.HasPrefix(got, "  *") {
 		t.Fatalf("row = %q, want the private marker kept once it is read", got)
 	}
 }
@@ -393,7 +397,7 @@ func TestNextAndPreviousMessage(t *testing.T) {
 
 	// At the first message, p must say so rather than doing nothing.
 	h.typ('p')
-	h.assertContains("No further message", "stepping past the first message explains itself")
+	h.assertContains("This is the first message", "stepping past the first message explains itself")
 }
 
 func TestANSIArtInAMessageKeepsItsGlyphsAndColor(t *testing.T) {
@@ -757,16 +761,16 @@ func TestUnreadMessagesAreMarkedAndCounted(t *testing.T) {
 	h := newHarness(t)
 
 	// Go Programming holds two messages, both unread to begin with.
-	if got := h.row(2); !strings.Contains(got, "2/2 msg") {
+	if got := h.row(listTop+1); !strings.Contains(got, "2/2 msg") {
 		t.Fatalf("conference row = %q, want it to show 2 of 2 unread", got)
 	}
-	if !strings.Contains(h.row(2), "•") {
-		t.Fatalf("conference row = %q, want the unread bullet", h.row(2))
+	if !strings.Contains(h.row(listTop+1), "•") {
+		t.Fatalf("conference row = %q, want the unread bullet", h.row(listTop+1))
 	}
 
 	h.down()
 	h.enter()
-	if got := h.row(1); !strings.Contains(got, "•") {
+	if got := h.row(listTop); !strings.Contains(got, "•") {
 		t.Fatalf("message row = %q, want the unread bullet", got)
 	}
 }
@@ -785,11 +789,11 @@ func TestReadingAMessageMarksIt(t *testing.T) {
 	}
 
 	h.esc()
-	if strings.Contains(h.row(1), "•") {
-		t.Fatalf("message row = %q, want the bullet gone once it is read", h.row(1))
+	if strings.Contains(h.row(listTop), "•") {
+		t.Fatalf("message row = %q, want the bullet gone once it is read", h.row(listTop))
 	}
 	h.esc()
-	if got := h.row(2); !strings.Contains(got, "1/2 msg") {
+	if got := h.row(listTop+1); !strings.Contains(got, "1/2 msg") {
 		t.Fatalf("conference row = %q, want 1 of 2 still unread", got)
 	}
 }
@@ -843,7 +847,7 @@ func TestMarkConferenceRead(t *testing.T) {
 	h.assertContains("Marked Go Programming read", "the reader confirms it")
 
 	h.esc()
-	if got := h.row(2); strings.Contains(got, "/2 msg") {
+	if got := h.row(listTop+1); strings.Contains(got, "/2 msg") {
 		t.Fatalf("conference row = %q, want no unread count left", got)
 	}
 }
@@ -916,4 +920,44 @@ func TestInterfaceUsesOnlyCharactersCP437Has(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestEndOfConferenceGoesToTheNextWithUnreadMail(t *testing.T) {
+	h := newHarness(t)
+	h.down()  // Go Programming
+	h.enter() // message list
+	h.enter() // first message
+	h.typ('n')
+	h.typ('n') // past the last one
+
+	h.assertContains("End of Go Programming. Next with unread mail: ANSI Art (1)", "the status bar says where it goes on")
+	h.assertContains("Conferences", "back on the conference list")
+	h.enter()
+	h.assertContains("ANSI Art", "Enter opens the conference that was selected")
+	h.assertContains("SYSOP", "its message is listed")
+}
+
+func TestEndOfTheLastUnreadConferenceSaysSo(t *testing.T) {
+	h := newHarness(t)
+	for _, c := range h.app.m.conferences {
+		h.read.MarkAllRead(c.Number, c.Numbers())
+	}
+	h.down()
+	h.enter()
+	h.enter()
+	h.typ('n')
+	h.typ('n')
+	h.assertContains("End of Go Programming. No unread mail left.", "nothing left to read is said plainly")
+}
+
+func TestSpaceReadsThroughTheMessageAndOnToTheNext(t *testing.T) {
+	h := newHarness(t)
+	h.down()
+	h.enter()
+	h.enter() // the 60-line message
+	for i := 0; i < 10 && !strings.Contains(h.text(), "Zweite Nachricht"); i++ {
+		h.typ(' ')
+	}
+	h.assertContains("Zweite Nachricht", "space paged to the end and went on to the next message")
+	h.assertContains("CAROL", "the second message is open")
 }

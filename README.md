@@ -217,7 +217,9 @@ go run ./cmd/nmr gui  testdata/SAMPLE.QWK     # im eigenen Fenster
 ```
 
 Tasten: `↑↓`/`jk` bewegen, `Enter` öffnen, `Esc`/`q` zurück, `w` Welcome-Screen,
-`n`/`p` nächste/vorige Nachricht, `space` blättern, `r` antworten, `e` neu
+`n`/`p` nächste/vorige Nachricht (nach der letzten einer Konferenz zurück zur
+Liste, auf der nächsten mit ungelesener Post), `space` blättern und am Ende
+weiter zur nächsten Nachricht, `r` antworten, `e` neu
 schreiben, `N` neue Netmail, `m` Konferenz als gelesen markieren, `o`
 Warteschlange, `f` Post austauschen, `s` Einrichtung, `?` Hilfe, `Q` beenden.
 

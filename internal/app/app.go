@@ -220,6 +220,8 @@ func (a *App) HandleKey(ev *tcell.EventKey) {
 		a.help = true
 	case ev.Rune() == 'f' && a.fetch != nil:
 		a.startFetch()
+	case ev.Rune() == 'N' && a.hasPacket:
+		a.newNetmail()
 	case ev.Rune() == 's' && a.setup != nil:
 		a.openSetup()
 	}
@@ -313,6 +315,7 @@ var helpLines = []string{
 	"    o              pending replies",
 	"",
 	"  Mail",
+	"    N              write a new netmail",
 	"    f              send replies and fetch new mail",
 	"    s              set up or change the BBS login",
 	"",
@@ -343,6 +346,18 @@ func (a *App) drawHelp(g *ansi.Grid, w, h int) {
 		}
 		drawText(g, x, y+1+i, boxW, fgSelected, bgSelected, l)
 	}
+}
+
+// newNetmail opens a new netmail from anywhere in the reader: the
+// netmail conference may be far down the list, or scrolled away.
+func (a *App) newNetmail() {
+	for _, c := range a.m.conferences {
+		if c.Netmail {
+			a.compose(newMessageForm(c, a.from))
+			return
+		}
+	}
+	a.flash = "Your packets name no netmail conference -- fetch a new one with f."
 }
 
 // inForm reports whether a text form has the keyboard, where letters

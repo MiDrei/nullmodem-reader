@@ -24,6 +24,9 @@ type fakeBBS struct {
 	lastAreaIDs []int64
 	uploaded    []byte
 	uploadName  string
+	// uploadAnswer, when set, is the JSON the upload answers with
+	// (200) instead of a bare 204.
+	uploadAnswer string
 }
 
 func (f *fakeBBS) handler(t *testing.T) http.Handler {
@@ -97,6 +100,10 @@ func (f *fakeBBS) handler(t *testing.T) http.Handler {
 		defer part.Close()
 		f.uploaded, _ = io.ReadAll(part)
 		f.uploadName = hdr.Filename
+		if f.uploadAnswer != "" {
+			io.WriteString(w, f.uploadAnswer)
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	return mux
@@ -209,8 +216,12 @@ func TestUploadREPSendsTheFileAsMultipartFieldFile(t *testing.T) {
 		t.Fatalf("writing fixture: %v", err)
 	}
 
-	if err := c.UploadREP(context.Background(), path); err != nil {
+	res, err := c.UploadREP(context.Background(), path)
+	if err != nil {
 		t.Fatalf("UploadREP: %v", err)
+	}
+	if len(res.Rejected) != 0 {
+		t.Fatalf("a 204 answer should mean nothing rejected, got %+v", res)
 	}
 	if string(f.uploaded) != string(want) {
 		t.Fatalf("server received %q, want %q", f.uploaded, want)
@@ -287,5 +298,24 @@ func TestWrongPasswordIsErrUnauthorized(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid username or password") {
 		t.Fatalf("err = %v, want the server's message kept", err)
+	}
+}
+
+func TestUploadREPReportsWhatTheBBSRefused(t *testing.T) {
+	f := &fakeBBS{token: "tok-123", uploadAnswer: `{"posted":1,"sent":0,"skipped":1,` +
+		`"rejected":[{"index":1,"to":"nobody","subject":"lost","reason":"unknown recipient \"nobody\""}]}`}
+	c, _ := newTestClient(t, f)
+	if err := c.Login(context.Background(), "correct horse"); err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "NULLMDM.REP")
+	os.WriteFile(path, []byte("PK\x03\x04"), 0o644)
+
+	res, err := c.UploadREP(context.Background(), path)
+	if err != nil {
+		t.Fatalf("UploadREP: %v", err)
+	}
+	if res.Posted != 1 || len(res.Rejected) != 1 || res.Rejected[0].Index != 1 || !strings.Contains(res.Rejected[0].Reason, "unknown recipient") {
+		t.Fatalf("result = %+v", res)
 	}
 }

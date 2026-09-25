@@ -23,17 +23,18 @@ type fakeClient struct {
 	// packet is what a download produces; empty means no new mail.
 	packet []qwk.PackedMessage
 
-	uploaded []string
-	uploads  int
+	uploaded     []string
+	uploads      int
+	uploadResult xfer.UploadResult
 }
 
-func (c *fakeClient) UploadREP(_ context.Context, path string) error {
+func (c *fakeClient) UploadREP(_ context.Context, path string) (xfer.UploadResult, error) {
 	c.uploads++
 	if c.uploadErr != nil {
-		return c.uploadErr
+		return xfer.UploadResult{}, c.uploadErr
 	}
 	c.uploaded = append(c.uploaded, path)
-	return nil
+	return c.uploadResult, nil
 }
 
 func (c *fakeClient) DownloadQWK(_ context.Context, dir string) (string, error) {
@@ -273,5 +274,48 @@ func TestLockErrorSaysWhoHoldsIt(t *testing.T) {
 	}
 	if got := err.Error(); !strings.Contains(got, "pid") {
 		t.Fatalf("error = %q, want it to name the holder so someone can act on it", got)
+	}
+}
+
+func TestRefusedRepliesStayHeldAndAreNotSentAgain(t *testing.T) {
+	q, dirs := setup(t,
+		store.Reply{Conference: 3, To: "All", Subject: "fine", Body: "text"},
+		store.Reply{Conference: 0, To: "nobody", Subject: "lost", Body: "text"},
+	)
+	c := &fakeClient{uploadResult: xfer.UploadResult{Posted: 1,
+		Rejected: []xfer.Rejected{{Index: 1, Reason: `unknown recipient "nobody"`}}}}
+
+	res, err := Run(context.Background(), c, q, "TEST", dirs)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Sent != 1 || len(res.Rejected) != 1 || res.Rejected[0].Subject != "lost" {
+		t.Fatalf("result = %+v, want 1 sent and the netmail refused", res)
+	}
+	left, _ := q.List()
+	if len(left) != 1 || left[0].Subject != "lost" || !left[0].Held() || !strings.Contains(left[0].Error, "unknown recipient") {
+		t.Fatalf("queue = %+v, want only the refused one, held with the reason", left)
+	}
+
+	// Held: the next exchange does not upload it again.
+	if _, err := Run(context.Background(), c, q, "TEST", dirs); err != nil {
+		t.Fatalf("second Run: %v", err)
+	}
+	if c.uploads != 1 {
+		t.Fatalf("uploads = %d, want 1 -- a held message went out again", c.uploads)
+	}
+
+	// Edited (the error cleared), it goes out.
+	left[0].To, left[0].Error = "bob", ""
+	if err := q.Update(left[0]); err != nil {
+		t.Fatal(err)
+	}
+	c.uploadResult = xfer.UploadResult{Sent: 1}
+	res, err = Run(context.Background(), c, q, "TEST", dirs)
+	if err != nil || res.Sent != 1 || c.uploads != 2 {
+		t.Fatalf("after editing: %+v, %v, uploads %d", res, err, c.uploads)
+	}
+	if n, _ := q.Len(); n != 0 {
+		t.Fatalf("queue holds %d, want it empty", n)
 	}
 }

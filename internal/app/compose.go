@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -119,7 +120,12 @@ type composeForm struct {
 	from    string
 	subject field
 	to      field
+	// address is the recipient's FTN address, asked for in a netmail
+	// conference only: empty means someone on this BBS.
+	address field
 	focus   int
+	// editing is the queued message being changed, nil for a new one.
+	editing *store.Reply
 	// refNumber is the message being answered, 0 for a new thread.
 	refNumber int
 	// quoted is the prepared quote seeded into the editor buffer.
@@ -130,15 +136,49 @@ type composeForm struct {
 
 // newReplyForm prepares a reply to m.
 func newReplyForm(conf Conference, m Message, from string, width int) *composeForm {
+	name, addr := splitRecipient(m.From)
 	return &composeForm{
 		conf:      conf,
 		from:      from,
-		to:        newField("To", m.From),
+		to:        newField("To", name),
+		address:   newField("Address", addr),
 		subject:   newField("Subject", compose.ReplySubject(m.Subject)),
 		refNumber: m.Number,
-		quoted:    compose.Quote(decodeBody(m.Body), m.From, width),
+		quoted:    compose.Quote(decodeBody(m.Body), name, width),
 		private:   m.Private,
 	}
+}
+
+// newEditForm reopens a queued message, e.g. one the BBS refused.
+func newEditForm(conf Conference, r store.Reply) *composeForm {
+	to, addr := r.To, ""
+	if conf.Netmail {
+		to, addr = splitRecipient(r.To)
+	}
+	rc := r
+	return &composeForm{
+		conf:      conf,
+		from:      r.From,
+		to:        newField("To", to),
+		address:   newField("Address", addr),
+		subject:   newField("Subject", r.Subject),
+		refNumber: r.RefNumber,
+		private:   r.Private,
+		editing:   &rc,
+	}
+}
+
+// ftnAddress matches zone:net/node[.point][@domain].
+var ftnAddress = regexp.MustCompile(`^\d+:\d+/\d+(\.\d+)?(@[A-Za-z0-9_-]+)?$`)
+
+// splitRecipient takes "Name@zone:net/node" -- how NullModem BBS names
+// someone on another FTN system -- apart into name and address. Any
+// other value is a plain name.
+func splitRecipient(s string) (name, addr string) {
+	if at := strings.LastIndex(s, "@"); at > 0 && ftnAddress.MatchString(strings.TrimSpace(s[at+1:])) {
+		return strings.TrimSpace(s[:at]), strings.TrimSpace(s[at+1:])
+	}
+	return s, ""
 }
 
 // newMessageForm prepares a fresh message in a conference.
@@ -154,6 +194,7 @@ func newMessageForm(conf Conference, from string) *composeForm {
 		conf:    conf,
 		from:    from,
 		to:      newField("To", to),
+		address: newField("Address", ""),
 		subject: newField("Subject", ""),
 	}
 }
@@ -162,11 +203,37 @@ func (v *composeForm) keyHelp() string {
 	return "Tab:field  Enter:write the message  Esc:cancel"
 }
 
-func (v *composeForm) fields() []*field { return []*field{&v.to, &v.subject} }
+func (v *composeForm) fields() []*field {
+	if v.conf.Netmail {
+		return []*field{&v.to, &v.address, &v.subject}
+	}
+	return []*field{&v.to, &v.subject}
+}
+
+// recipient is the To the queued message carries: in a netmail
+// conference with an address, "Name@address" (or the bare address for
+// that system's sysop), which is the form the BBS routes.
+func (v *composeForm) recipient() (string, error) {
+	to := strings.TrimSpace(v.to.String())
+	addr := strings.TrimSpace(v.address.String())
+	if !v.conf.Netmail || addr == "" {
+		return to, nil
+	}
+	if !ftnAddress.MatchString(addr) {
+		return "", fmt.Errorf("%q is not an FTN address -- it looks like 2:301/1 or 2:301/1.5", addr)
+	}
+	if to == "" {
+		return addr, nil
+	}
+	return to + "@" + addr, nil
+}
 
 func (v *composeForm) draw(a *App, g *ansi.Grid, r rect) {
 	title := "New message in " + v.conf.Name
-	if v.refNumber > 0 {
+	switch {
+	case v.editing != nil:
+		title = "Edit queued message in " + v.conf.Name
+	case v.refNumber > 0:
 		title = "Reply in " + v.conf.Name
 	}
 	drawText(g, r.x+1, r.y, r.w-1, fgAccent, bgText, title)
@@ -197,6 +264,15 @@ func (v *composeForm) draw(a *App, g *ansi.Grid, r rect) {
 		row++
 	}
 
+	if v.conf.Netmail && row < r.y+r.h {
+		drawText(g, r.x+11, row, r.w-11, fgDim, bgText,
+			"Address: empty for someone on this BBS, else e.g. 2:301/1")
+		row++
+	}
+	if v.editing != nil && v.editing.Error != "" && row < r.y+r.h {
+		drawText(g, r.x+1, row, r.w-1, fgAccent, bgText, "Refused last time: "+v.editing.Error)
+		row++
+	}
 	row++
 	if v.private {
 		drawText(g, r.x+1, row, r.w-1, fgDim, bgText, "Private message")
@@ -238,12 +314,21 @@ func (a *App) writeAndQueue(v *composeForm) {
 		a.flash = "Replies cannot be queued: no data directory for this packet."
 		return
 	}
-	if strings.TrimSpace(v.to.String()) == "" {
+	to, err := v.recipient()
+	if err != nil {
+		a.flash = err.Error()
+		return
+	}
+	if to == "" {
 		a.flash = "This message needs a recipient."
 		return
 	}
 
-	body, err := a.runEditor(compose.Template(v.quoted))
+	initial := compose.Template(v.quoted)
+	if v.editing != nil {
+		initial = compose.EditTemplate(v.editing.Body)
+	}
+	body, err := a.runEditor(initial)
 	if err != nil {
 		a.flash = err.Error()
 		return
@@ -256,10 +341,27 @@ func (a *App) writeAndQueue(v *composeForm) {
 		return
 	}
 
+	if v.editing != nil {
+		// Changing it is the user's answer to whatever the BBS
+		// objected to, so it goes out again with the next exchange.
+		r := *v.editing
+		r.To, r.Subject, r.Body, r.Error = to, strings.TrimSpace(v.subject.String()), body, ""
+		if err := a.queue.Update(r); err != nil {
+			a.flash = "Could not save the message: " + err.Error()
+			return
+		}
+		a.pop()
+		if o, ok := a.top().(*outbox); ok {
+			o.reload()
+		}
+		a.flash = "Saved -- " + a.sendHint() + "."
+		return
+	}
+
 	stored, err := a.queue.Add(store.Reply{
 		Conference:     v.conf.Number,
 		ConferenceName: v.conf.Name,
-		To:             strings.TrimSpace(v.to.String()),
+		To:             to,
 		From:           v.from,
 		Subject:        strings.TrimSpace(v.subject.String()),
 		Body:           body,
@@ -360,7 +462,7 @@ func (v *outbox) reload() {
 	}
 }
 
-func (v *outbox) keyHelp() string { return "↑↓:move  d:discard  Esc:back" }
+func (v *outbox) keyHelp() string { return "↑↓:move  e:edit  d:discard  Esc:back" }
 
 func (v *outbox) draw(a *App, g *ansi.Grid, r rect) {
 	if v.err != nil {
@@ -374,6 +476,11 @@ func (v *outbox) draw(a *App, g *ansi.Grid, r rect) {
 
 	drawText(g, r.x+1, r.y, r.w-1, fgAccent, bgText,
 		strconv.Itoa(len(v.replies))+" message(s) waiting -- "+a.sendHint())
+	if sel := v.replies[v.sel]; sel.Held() {
+		// Why the selected one is held, and what to do about it.
+		drawText(g, r.x+1, r.y+1, r.w-1, fgWarn, bgWarn,
+			" ! Refused: "+sel.Error+" -- e: fix and resend, d: discard ")
+	}
 
 	body := rect{r.x, r.y + 2, r.w, r.h - 2}
 	v.follow(body.h)
@@ -398,7 +505,10 @@ func (v *outbox) draw(a *App, g *ansi.Grid, r rect) {
 			name = "Conference " + strconv.Itoa(m.Conference)
 		}
 		mark := " "
-		if m.Private {
+		switch {
+		case m.Held():
+			mark = "!"
+		case m.Private:
 			mark = "*"
 		}
 		line := " " + mark + " " + pad(name, confW) + " " + pad(m.To, toW) + " " + pad(m.Subject, subjW)
@@ -408,6 +518,11 @@ func (v *outbox) draw(a *App, g *ansi.Grid, r rect) {
 
 func (v *outbox) key(a *App, ev *tcell.EventKey) bool {
 	if v.listKey(ev, len(v.replies), 10) {
+		return true
+	}
+	if ev.Rune() == 'e' && len(v.replies) > 0 {
+		r := v.replies[v.sel]
+		a.push(newEditForm(a.conferenceFor(r), r))
 		return true
 	}
 	if ev.Rune() == 'd' {
@@ -424,4 +539,16 @@ func (v *outbox) key(a *App, ev *tcell.EventKey) bool {
 		return true
 	}
 	return false
+}
+
+// conferenceFor is the conference a queued message belongs to: the
+// open packets' own, or one rebuilt from what the queue remembers when
+// those packets are gone. Conference 0 is netmail by QWK convention.
+func (a *App) conferenceFor(r store.Reply) Conference {
+	for _, c := range a.m.conferences {
+		if c.Number == r.Conference {
+			return c
+		}
+	}
+	return Conference{Number: r.Conference, Name: r.ConferenceName, Netmail: r.Conference == 0}
 }

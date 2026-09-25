@@ -42,6 +42,9 @@ type Result struct {
 	PacketPath string
 	// Received is how many messages that packet holds.
 	Received int
+	// Rejected are queued messages the BBS refused; they stay in the
+	// queue, held with the reason (see store.Reply.Error).
+	Rejected []store.Reply
 }
 
 // NoNewMail reports whether the BBS had nothing to send.
@@ -50,7 +53,7 @@ func (r Result) NoNewMail() bool { return r.PacketPath == "" }
 // Client is the part of xfer.Client an exchange uses, named as an
 // interface so a test can stand in for a BBS without a server.
 type Client interface {
-	UploadREP(ctx context.Context, path string) error
+	UploadREP(ctx context.Context, path string) (xfer.UploadResult, error)
 	DownloadQWK(ctx context.Context, dir string) (string, error)
 }
 
@@ -64,8 +67,8 @@ type Client interface {
 func Run(ctx context.Context, c Client, q *store.Queue, bbsID string, dirs Dirs) (Result, error) {
 	var res Result
 
-	sent, unmapped, err := send(ctx, c, q, bbsID, dirs.Up)
-	res.Sent, res.Unmapped = sent, unmapped
+	sent, rejected, unmapped, err := send(ctx, c, q, bbsID, dirs.Up)
+	res.Sent, res.Rejected, res.Unmapped = sent, rejected, unmapped
 	if err != nil {
 		return res, err
 	}
@@ -100,37 +103,64 @@ func Run(ctx context.Context, c Client, q *store.Queue, bbsID string, dirs Dirs)
 // connection. Entries are removed by the IDs that actually went into
 // the packet, so a reply written while the upload was running stays
 // queued for next time rather than being dropped unsent.
-func send(ctx context.Context, c Client, q *store.Queue, bbsID, upDir string) (int, []rune, error) {
+func send(ctx context.Context, c Client, q *store.Queue, bbsID, upDir string) (int, []store.Reply, []rune, error) {
 	if q == nil {
-		return 0, nil, nil
+		return 0, nil, nil, nil
 	}
-	pending, err := q.List()
+	all, err := q.List()
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
+	}
+	// Held messages were refused before and would only be refused
+	// again: they wait for the user to fix or discard them.
+	var pending []store.Reply
+	for _, r := range all {
+		if !r.Held() {
+			pending = append(pending, r)
+		}
 	}
 	if len(pending) == 0 {
-		return 0, nil, nil
+		return 0, nil, nil, nil
 	}
 
 	if err := os.MkdirAll(upDir, 0o755); err != nil {
-		return 0, nil, fmt.Errorf("exchange: creating %s: %w", upDir, err)
+		return 0, nil, nil, fmt.Errorf("exchange: creating %s: %w", upDir, err)
 	}
 	path := filepath.Join(upDir, strings.ToUpper(bbsID)+".REP")
 
 	unmapped, err := compose.BuildREP(path, bbsID, pending)
 	if err != nil {
-		return 0, unmapped, err
+		return 0, nil, unmapped, err
 	}
-	if err := c.UploadREP(ctx, path); err != nil {
-		return 0, unmapped, fmt.Errorf("exchange: uploading %d queued message(s): %w", len(pending), err)
+	up, err := c.UploadREP(ctx, path)
+	if err != nil {
+		return 0, nil, unmapped, fmt.Errorf("exchange: uploading %d queued message(s): %w", len(pending), err)
 	}
 
-	ids := make([]string, len(pending))
+	// The BBS names refused messages by their position in the packet,
+	// which is their position in pending.
+	reasons := map[int]string{}
+	for _, r := range up.Rejected {
+		if r.Index >= 0 && r.Index < len(pending) {
+			reasons[r.Index] = r.Reason
+		}
+	}
+	var ids []string
+	var rejected []store.Reply
 	for i, r := range pending {
-		ids[i] = r.ID
+		reason, refused := reasons[i]
+		if !refused {
+			ids = append(ids, r.ID)
+			continue
+		}
+		r.Error = reason
+		if err := q.Update(r); err != nil {
+			return len(ids), rejected, unmapped, fmt.Errorf("exchange: keeping a refused message: %w", err)
+		}
+		rejected = append(rejected, r)
 	}
 	if err := q.RemoveAll(ids); err != nil {
-		return len(pending), unmapped, fmt.Errorf("exchange: the messages were sent but the queue could not be cleared: %w", err)
+		return len(ids), rejected, unmapped, fmt.Errorf("exchange: the messages were sent but the queue could not be cleared: %w", err)
 	}
 
 	// Keep the packet that actually went out: if the board later
@@ -139,5 +169,5 @@ func send(ctx context.Context, c Client, q *store.Queue, bbsID, upDir string) (i
 		os.Rename(path, filepath.Join(sentDir, time.Now().UTC().Format("20060102-150405")+".REP"))
 	}
 
-	return len(pending), unmapped, nil
+	return len(ids), rejected, unmapped, nil
 }

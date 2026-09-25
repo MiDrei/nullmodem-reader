@@ -36,7 +36,16 @@ type Reply struct {
 	// RefNumber is the message being replied to, 0 for a new thread.
 	RefNumber int  `json:"ref_number,omitempty"`
 	Private   bool `json:"private,omitempty"`
+	// Error is why the BBS refused this message the last time it was
+	// sent (an unknown recipient, say). Such a message stays queued but
+	// is held back from further exchanges until it is edited, which
+	// clears this, or discarded.
+	Error string `json:"error,omitempty"`
 }
+
+// Held reports whether r waits for the user rather than the next
+// exchange.
+func (r Reply) Held() bool { return r.Error != "" }
 
 // Queue is the on-disk set of pending replies for one system.
 //

@@ -144,6 +144,22 @@ func mergeModel(sources []Source) model {
 		if welcome, name := findWelcome(p); welcome != nil {
 			m.welcome, m.welcomeName = welcome, name
 		}
+
+		// A netmail conference is listed even without mail in it: it
+		// is where a new netmail is written, and a packet with nothing
+		// personal in it still says where that is (TOREADER.EXT's
+		// AREA ... N).
+		for _, area := range p.Ext.Areas {
+			if !area.IsNetmail() {
+				continue
+			}
+			if conf, ok := byNumber[area.Number]; ok {
+				conf.Netmail = true
+				continue
+			}
+			byNumber[area.Number] = &Conference{Number: area.Number, Name: conferenceName(p, area.Number), Netmail: true}
+			order = append(order, area.Number)
+		}
 	}
 
 	sort.Ints(order)

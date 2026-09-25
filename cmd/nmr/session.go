@@ -95,7 +95,7 @@ func (s session) fetch(ctx context.Context) (app.FetchResult, error) {
 	if errors.Is(err, sched.ErrSkipped) {
 		return app.FetchResult{}, errors.New("another exchange for this BBS is already running")
 	}
-	out := app.FetchResult{Sent: res.Sent, Received: res.Received, NoNewMail: res.NoNewMail()}
+	out := app.FetchResult{Sent: res.Sent, Received: res.Received, NoNewMail: res.NoNewMail(), Rejected: res.Rejected}
 	if len(res.Unmapped) > 0 {
 		out.Note = unmappedNote(res.Unmapped)
 	}

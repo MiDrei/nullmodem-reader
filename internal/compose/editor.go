@@ -97,6 +97,12 @@ func Template(quoted string) string {
 	return b.String()
 }
 
+// EditTemplate is the buffer for editing a message that is already
+// written: the same hint, then the text as it stands.
+func EditTemplate(body string) string {
+	return templateHint + "\n\n" + body + "\n"
+}
+
 // StripTemplate cleans an edited buffer: comment lines out, trailing
 // blank lines off.
 //

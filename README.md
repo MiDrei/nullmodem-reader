@@ -136,6 +136,20 @@ der Reader sofort Post; sonst zeigt er alle heruntergeladenen Pakete zusammen
 als eine Ansicht. Was vor einem Austausch ungelesen war, bleibt so stehen, bis
 es gelesen ist — die BBS liefert eine Nachricht nur einmal aus.
 
+### Netmail
+
+`N` schreibt von überall aus eine neue Netmail; die Netmail-Konferenz
+„Personal“ steht auch ohne Post darin in der Liste (NullModem BBS kennzeichnet
+sie seit 0.26.0 im Paket). Das Formular fragt nach Name und Adresse: Adresse
+leer heißt jemand auf dieser BBS, sonst eine FTN-Adresse wie `2:301/1.5` — der
+Reader schickt dann `Name@2:301/1.5`. Netmail von einem anderen System zeigt
+den Absender in derselben Form, eine Antwort findet also zurück.
+
+Weist die BBS eine Nachricht zurück (unbekannter Empfänger, keine
+Schreibrechte, …), bleibt sie mit dem Grund in der Warteschlange (`o`, mit `!`
+markiert) und wird nicht erneut gesendet: `e` öffnet sie zum Korrigieren,
+danach geht sie mit dem nächsten Austausch raus; `d` verwirft sie.
+
 Aufräumen stellst du im Einrichtungsdialog unter „Keep days“ ein (in der
 Konfiguration `keep_days`, je BBS): Ein Paket, in dem alles gelesen ist, wird
 nach so vielen Tagen gelöscht, gesendete Antwortpakete ebenso; das neueste
@@ -191,8 +205,8 @@ go run ./cmd/nmr gui  testdata/SAMPLE.QWK     # im eigenen Fenster
 
 Tasten: `↑↓`/`jk` bewegen, `Enter` öffnen, `Esc`/`q` zurück, `w` Welcome-Screen,
 `n`/`p` nächste/vorige Nachricht, `space` blättern, `r` antworten, `e` neu
-schreiben, `m` Konferenz als gelesen markieren, `o` Warteschlange, `f` Post
-austauschen, `s` Einrichtung, `?` Hilfe, `Q` beenden.
+schreiben, `N` neue Netmail, `m` Konferenz als gelesen markieren, `o`
+Warteschlange, `f` Post austauschen, `s` Einrichtung, `?` Hilfe, `Q` beenden.
 
 Ohne Vollbild:
 

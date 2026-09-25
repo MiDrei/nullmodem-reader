@@ -454,6 +454,10 @@ func exchangeOnce(ctx context.Context, client *xfer.Client, cfg config.Config, s
 	} else if n > 0 {
 		fmt.Fprintf(os.Stderr, "nmr: removed %d old packet(s) (keep_days: %d)\n", n, sys.KeepDays)
 	}
+	for _, r := range res.Rejected {
+		fmt.Fprintf(os.Stderr, "nmr: not delivered: %q to %s -- %s (held in the outbox; edit or discard it in the reader)\n",
+			r.Subject, r.To, r.Error)
+	}
 	if len(res.Unmapped) > 0 {
 		// Worth saying, not worth refusing to send over: the message
 		// is still readable, and the user can see what was lost.

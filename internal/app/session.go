@@ -26,9 +26,26 @@ import (
 type FetchResult struct {
 	Sent, Received int
 	NoNewMail      bool
+	// Rejected are queued messages the BBS refused, with its reasons.
+	// They stay in the outbox, held until edited or discarded.
+	Rejected []store.Reply
 	// Note is something worth telling the user even though the
 	// exchange succeeded, e.g. characters that could not be sent.
 	Note string
+}
+
+// rejectedNote says what the BBS refused, where the user will look
+// right after an exchange: the status bar.
+func rejectedNote(rejected []store.Reply) string {
+	switch len(rejected) {
+	case 0:
+		return ""
+	case 1:
+		r := rejected[0]
+		return fmt.Sprintf("Not delivered: %q -- %s. It waits in the outbox (o).", r.Subject, r.Error)
+	default:
+		return fmt.Sprintf("%d messages were not delivered -- see the outbox (o).", len(rejected))
+	}
 }
 
 // Loaded is the packets to show, oldest first, plus everything the
@@ -149,7 +166,9 @@ func (a *App) startFetch() {
 			return func(a *App) { a.noNewMail(res) }
 		}
 		if a.latest == nil {
-			return func(a *App) { a.flash = fmt.Sprintf("Received %d message(s).", res.Received) }
+			return func(a *App) {
+				a.flash = appendNote(fmt.Sprintf("Received %d message(s).", res.Received), rejectedNote(res.Rejected))
+			}
 		}
 		l, err := a.latest()
 		return func(a *App) {
@@ -161,7 +180,7 @@ func (a *App) startFetch() {
 				a.flash = err.Error()
 				return
 			}
-			a.flash = a.withSetupNote(appendNote(fetchSummary(res), res.Note))
+			a.flash = a.withSetupNote(appendNote(appendNote(fetchSummary(res), rejectedNote(res.Rejected)), res.Note))
 		}
 	})
 }
@@ -181,7 +200,7 @@ func (a *App) noNewMail(res FetchResult) {
 	if h, ok := a.top().(*homeView); ok && !a.hasPacket {
 		h.note = "Nothing to read yet -- the BBS had no new mail for you. Press f to try again later."
 	}
-	a.flash = a.withSetupNote(appendNote(text, res.Note))
+	a.flash = a.withSetupNote(appendNote(appendNote(text, rejectedNote(res.Rejected)), res.Note))
 }
 
 func (a *App) fetchFailed(err error) {

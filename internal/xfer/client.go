@@ -249,12 +249,32 @@ func (c *Client) DownloadQWK(ctx context.Context, dir string) (string, error) {
 	return dest, nil
 }
 
+// UploadResult is what the BBS did with an uploaded .REP.
+type UploadResult struct {
+	Posted  int `json:"posted"`
+	Sent    int `json:"sent"`
+	Skipped int `json:"skipped"`
+	// Rejected are the replies it did not deliver, by position in the
+	// packet, with the reason.
+	Rejected []Rejected `json:"rejected"`
+}
+
+// Rejected is one reply the BBS did not deliver.
+type Rejected struct {
+	Index   int    `json:"index"`
+	To      string `json:"to"`
+	Subject string `json:"subject"`
+	Reason  string `json:"reason"`
+}
+
 // UploadREP posts a .REP reply packet. The server routes its messages
-// into the right areas and answers 204.
-func (c *Client) UploadREP(ctx context.Context, path string) error {
+// into the right areas and says which ones it could not deliver. A
+// server that answers without a body (204, as older NullModem BBS
+// versions did) yields an empty result.
+func (c *Client) UploadREP(ctx context.Context, path string) (UploadResult, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("xfer: opening %s: %w", path, err)
+		return UploadResult{}, fmt.Errorf("xfer: opening %s: %w", path, err)
 	}
 	defer f.Close()
 
@@ -262,21 +282,34 @@ func (c *Client) UploadREP(ctx context.Context, path string) error {
 	mw := multipart.NewWriter(&body)
 	part, err := mw.CreateFormFile("file", filepath.Base(path))
 	if err != nil {
-		return fmt.Errorf("xfer: building upload: %w", err)
+		return UploadResult{}, fmt.Errorf("xfer: building upload: %w", err)
 	}
 	if _, err := io.Copy(part, f); err != nil {
-		return fmt.Errorf("xfer: reading %s: %w", path, err)
+		return UploadResult{}, fmt.Errorf("xfer: reading %s: %w", path, err)
 	}
 	if err := mw.Close(); err != nil {
-		return fmt.Errorf("xfer: finishing upload: %w", err)
+		return UploadResult{}, fmt.Errorf("xfer: finishing upload: %w", err)
 	}
 
 	resp, err := c.do(ctx, http.MethodPost, "/api/bbs/qwk/upload", &body, mw.FormDataContentType())
 	if err != nil {
-		return err
+		return UploadResult{}, err
 	}
 	defer resp.Body.Close()
-	return expectStatus(resp, http.StatusNoContent, http.StatusOK)
+	if err := expectStatus(resp, http.StatusNoContent, http.StatusOK); err != nil {
+		return UploadResult{}, err
+	}
+	var res UploadResult
+	if resp.StatusCode == http.StatusOK {
+		// Bounded like an error body; a result is a few hundred bytes.
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		if len(bytes.TrimSpace(data)) > 0 {
+			if err := json.Unmarshal(data, &res); err != nil {
+				return UploadResult{}, fmt.Errorf("xfer: decoding upload result: %w", err)
+			}
+		}
+	}
+	return res, nil
 }
 
 func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {

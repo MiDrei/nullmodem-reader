@@ -29,6 +29,43 @@ var specialKeys = map[ebiten.Key]tcell.Key{
 	ebiten.KeyPageDown:    tcell.KeyPgDn,
 }
 
+// repeatingKeys fire again while held, like a keyboard's own
+// autorepeat: scrolling through a long message or deleting a word by
+// holding the key. Enter, Escape and Tab deliberately do not -- a held
+// Enter would open, send or confirm one thing after another.
+var repeatingKeys = map[ebiten.Key]bool{
+	ebiten.KeyUp:        true,
+	ebiten.KeyDown:      true,
+	ebiten.KeyLeft:      true,
+	ebiten.KeyRight:     true,
+	ebiten.KeyPageUp:    true,
+	ebiten.KeyPageDown:  true,
+	ebiten.KeyBackspace: true,
+	ebiten.KeyDelete:    true,
+}
+
+// Autorepeat timing in ticks (Ebitengine runs Update 60 times a
+// second): a first repeat after about a third of a second, then about
+// 20 per second -- close to the Windows and macOS defaults.
+const (
+	repeatDelay    = 20
+	repeatInterval = 3
+)
+
+// fires reports whether a key held for d ticks should produce an event
+// on this tick. d is inpututil.KeyPressDuration: 1 on the tick the key
+// went down, 0 when it is up.
+func fires(d int, repeats bool) bool {
+	switch {
+	case d == 1:
+		return true
+	case !repeats || d <= repeatDelay:
+		return false
+	default:
+		return (d-repeatDelay)%repeatInterval == 0
+	}
+}
+
 // controlKeys are the Ctrl combinations the compose form's text
 // fields use.
 var controlKeys = map[ebiten.Key]tcell.Key{
@@ -66,7 +103,7 @@ func pollKeys() []*tcell.EventKey {
 	}
 
 	for k, tk := range specialKeys {
-		if inpututil.IsKeyJustPressed(k) {
+		if fires(inpututil.KeyPressDuration(k), repeatingKeys[k]) {
 			mod := tcell.ModNone
 			if shift && tk == tcell.KeyTab {
 				// Shift-Tab is its own key in tcell, not a modifier.

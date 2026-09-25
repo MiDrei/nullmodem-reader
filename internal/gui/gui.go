@@ -1,13 +1,16 @@
 package gui
 
 import (
+	"bytes"
 	"fmt"
 	"image"
+	"image/png"
 	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"git.maik.ch/nullmodem/kit/ansi"
+	"git.maik.ch/nullmodem/reader/assets"
 	"git.maik.ch/nullmodem/reader/internal/app"
 )
 
@@ -55,6 +58,11 @@ func Run(a *app.App) error {
 	w.resizeTo(defaultCols*cellW*defaultScale, defaultRows*cellH*defaultScale)
 
 	ebiten.SetWindowTitle("NullModem Reader")
+	if icon, err := png.Decode(bytes.NewReader(assets.Icon)); err == nil {
+		// Title bar and taskbar; macOS takes the icon from the app
+		// bundle instead and ignores this.
+		ebiten.SetWindowIcon([]image.Image{icon})
+	}
 	ebiten.SetWindowSize(defaultCols*cellW*defaultScale, defaultRows*cellH*defaultScale)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	// The reader is idle between keypresses; redrawing 60 times a

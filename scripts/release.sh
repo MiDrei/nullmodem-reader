@@ -50,6 +50,19 @@ GOWORK=off go test ./...
 dist="$root/dist/$version"
 rm -rf "$dist"
 mkdir -p "$dist"
+
+# Icon and version details for nmr.exe (Explorer's properties, the
+# taskbar). go-winres writes them as .syso files that go build links
+# into Windows builds only; they carry this version, so they are made
+# fresh here and removed again afterwards.
+trap 'rm -f "$root"/cmd/nmr/rsrc_windows_*.syso' EXIT
+GOWORK=off go run github.com/tc-hib/go-winres@v0.3.3 simply \
+	--arch amd64,arm64 --out cmd/nmr/rsrc --manifest cli \
+	--product-name "NullModem Reader" \
+	--file-description "NullModem Reader - QWK offline reader" \
+	--product-version "$version" --file-version "$version" \
+	--original-filename nmr.exe --copyright "NullModem" \
+	--icon assets/icon/nmr.png
 for target in "${TARGETS[@]}"; do
 	os=${target%/*}
 	arch=${target#*/}

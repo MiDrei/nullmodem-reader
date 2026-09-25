@@ -16,3 +16,10 @@ import _ "embed"
 //
 //go:embed font/cp437-8x16.bin
 var CP437Font []byte
+
+// Icon is the application icon, 256x256 PNG: "NM" and a cursor in the
+// same CP437 font, drawn by tools/mkicon. The GUI uses it as its window
+// icon; scripts/release.sh builds it into nmr.exe.
+//
+//go:embed icon/nmr.png
+var Icon []byte

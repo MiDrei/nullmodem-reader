@@ -322,13 +322,20 @@ func newSetupForm(defaults SetupInput) *setupForm {
 	// Start where there is something to type.
 	switch {
 	case defaults.URL == "":
-		v.focus = 0
+		v.setFocus(0)
 	case defaults.Username == "":
-		v.focus = 1
+		v.setFocus(1)
 	default:
-		v.focus = 2
+		v.setFocus(2)
 	}
 	return v
+}
+
+// setFocus moves the keyboard to field i and selects what it holds, so
+// typing replaces a prefilled value instead of appending to it.
+func (v *setupForm) setFocus(i int) {
+	v.focus = i
+	v.fields()[i].focus()
 }
 
 func (v *setupForm) fields() []*field { return []*field{&v.url, &v.username, &v.password} }
@@ -352,7 +359,15 @@ func (v *setupForm) draw(a *App, g *ansi.Grid, r rect) {
 		}
 		box := rect{r.x + 15, row, max(r.w-16, 1), 1}
 		fill(g, box, fg, bg)
-		drawText(g, box.x, box.y, box.w, fg, bg, f.display())
+		if i == v.focus && f.selected {
+			// The selection reads as text on a contrasting bar within
+			// the field, the way a highlighted value looks in a dialog.
+			sel := f.display()
+			fill(g, rect{box.x, box.y, min(len([]rune(sel)), box.w), 1}, fgBar, bgBar)
+			drawText(g, box.x, box.y, box.w, fgBar, bgBar, sel)
+		} else {
+			drawText(g, box.x, box.y, box.w, fg, bg, f.display())
+		}
 		if i == v.focus {
 			a.cursorX, a.cursorY, a.cursorOn = box.x+min(f.cur, box.w-1), box.y, true
 		}
@@ -367,14 +382,14 @@ func (v *setupForm) draw(a *App, g *ansi.Grid, r rect) {
 func (v *setupForm) key(a *App, ev *tcell.EventKey) bool {
 	switch ev.Key() {
 	case tcell.KeyTab, tcell.KeyDown:
-		v.focus = (v.focus + 1) % len(v.fields())
+		v.setFocus((v.focus + 1) % len(v.fields()))
 		return true
 	case tcell.KeyBacktab, tcell.KeyUp:
-		v.focus = (v.focus + len(v.fields()) - 1) % len(v.fields())
+		v.setFocus((v.focus + len(v.fields()) - 1) % len(v.fields()))
 		return true
 	case tcell.KeyEnter:
 		if v.focus < len(v.fields())-1 {
-			v.focus++
+			v.setFocus(v.focus + 1)
 			return true
 		}
 		v.submit(a)
@@ -391,7 +406,7 @@ func (v *setupForm) submit(a *App) {
 	}
 	for i, f := range []string{in.URL, in.Username, in.Password} {
 		if f == "" {
-			v.focus = i
+			v.setFocus(i)
 			a.flash = v.fields()[i].label + " is missing."
 			return
 		}

@@ -82,6 +82,10 @@ Art auf, die nicht in Zeichenreihenfolge gezeichnet wird.
 - **GUI** (Ebitengine): eigenes Fenster mit eingebettetem CP437-8×16-Font,
   ganzzahlige Skalierung, DOS-Palette. Dieselbe Oberfläche wie im Terminal,
   nur pixelgenau — Blockgrafik kachelt nahtlos.
+- **Windows-Kosmetik**: Programmsymbol (von `tools/mkicon` aus dem
+  CP437-Font gezeichnet) und Versionsangaben in `nmr.exe`, dasselbe Symbol
+  als Fenstersymbol; gedrückt gehaltene Pfeil-, Bild- und Löschtasten
+  wiederholen sich im Fenster
 - **Einrichtung und Austausch im Reader**: Einrichtungsdialog beim ersten
   Start, `f` tauscht Post im Hintergrund aus, Passwort im Schlüsselbund des
   Systems — siehe *Erster Start ohne Kommandozeile*
@@ -116,6 +120,12 @@ welche Version läuft.
   ersten Start fragt es nach BBS-Adresse, Benutzername und Passwort, prüft
   die Anmeldung und holt gleich die erste Post. Aus einer Eingabeaufforderung
   heraus funktionieren weiterhin alle Befehle unten.
+
+  Beim ersten Start warnt Windows SmartScreen („Der Computer wurde durch
+  Windows geschützt“), weil `nmr.exe` nicht signiert und neu ist. Entweder
+  dort „Weitere Informationen“ → „Trotzdem ausführen“, oder vor dem
+  Entpacken das ZIP rechtsklicken → Eigenschaften → „Zulassen“ anhaken.
+  Nur beim ersten Start nötig.
 
 ### Erster Start ohne Kommandozeile
 

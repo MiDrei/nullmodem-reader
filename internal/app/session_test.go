@@ -228,3 +228,38 @@ func TestComposeHintMentionsTheFetchKeyWhenThereIsOne(t *testing.T) {
 		t.Fatalf("hint = %q", got)
 	}
 }
+
+func TestSetupSelectsAPrefilledFieldSoTypingReplacesIt(t *testing.T) {
+	f := &fakeSession{t: t, packetPath: buildPacket(t)}
+	opts := f.options()
+	opts.SetupDefaults = SetupInput{URL: "https://old.example", Username: "olduser"}
+	h := &harness{t: t, app: NewHome(opts, HomeSetup, ""), w: testWidth, h: testHeight}
+	h.draw()
+
+	// Focus starts on the empty password; going up selects the username.
+	h.key(tcell.KeyUp)
+	h.typeText("alice")
+	h.assertContains("alice", "the new name is shown")
+	if strings.Contains(h.text(), "olduser") {
+		t.Fatalf("typing appended instead of replacing:\n%s", h.text())
+	}
+
+	// A cursor key keeps the value and edits from there.
+	h.key(tcell.KeyUp)
+	h.key(tcell.KeyEnd)
+	h.typeText("/bbs")
+	h.assertContains("https://old.example/bbs", "End keeps the selected value and appends")
+
+	// Backspace on a selected value clears it.
+	h.key(tcell.KeyTab)
+	h.key(tcell.KeyBackspace2)
+	h.typeText("bob")
+	h.key(tcell.KeyTab)
+	h.typeText("pw")
+	h.enter()
+	h.settleBackground()
+	h.settleBackground()
+	if got := f.setupGot[0]; got.URL != "https://old.example/bbs" || got.Username != "bob" {
+		t.Fatalf("setup got %+v", got)
+	}
+}

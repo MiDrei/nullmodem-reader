@@ -21,6 +21,17 @@ type field struct {
 	cur   int
 	// mask shows the value as asterisks, for a password.
 	mask bool
+	// selected means the whole value is highlighted, as when a dialog
+	// field gets focus: typing replaces it, Backspace clears it, and a
+	// cursor key keeps it and starts editing at that end.
+	selected bool
+}
+
+// focus is called when the field gets the keyboard, in forms that
+// select a prefilled value on entry.
+func (f *field) focus() {
+	f.selected = len(f.value) > 0
+	f.cur = len(f.value)
 }
 
 func newField(label, value string) field {
@@ -43,6 +54,24 @@ func (f *field) display() string {
 // bindings, which is what lets Tab and Enter keep working while a
 // field has focus.
 func (f *field) edit(ev *tcell.EventKey) bool {
+	if f.selected {
+		f.selected = false
+		switch ev.Key() {
+		case tcell.KeyBackspace, tcell.KeyBackspace2, tcell.KeyDelete, tcell.KeyCtrlD:
+			f.value, f.cur = nil, 0
+			return true
+		case tcell.KeyRune:
+			if ev.Rune() >= ' ' {
+				f.value, f.cur = nil, 0
+			}
+		case tcell.KeyLeft, tcell.KeyHome, tcell.KeyCtrlA:
+			f.cur = 0
+			return true
+		case tcell.KeyRight, tcell.KeyEnd, tcell.KeyCtrlE:
+			f.cur = len(f.value)
+			return true
+		}
+	}
 	switch ev.Key() {
 	case tcell.KeyLeft:
 		f.cur = clamp(f.cur-1, 0, len(f.value))

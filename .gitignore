@@ -12,3 +12,6 @@ go.work.sum
 
 # Release-Artefakte (scripts/release.sh)
 /dist/
+
+# Windows-Ressourcen (Symbol, Versionsangaben), erzeugt von scripts/release.sh
+/cmd/nmr/*.syso

@@ -273,7 +273,7 @@ func TestConferencesAreSortedByNumberWithCounts(t *testing.T) {
 	if got := h.row(listTop); !strings.Contains(got, "Personal") || !strings.Contains(got, "1 msg") {
 		t.Fatalf("first row = %q, want conference 0 with its count", got)
 	}
-	if got := h.row(listTop+1); !strings.Contains(got, "Go Programming") || !strings.Contains(got, "2 msg") {
+	if got := h.row(listTop + 1); !strings.Contains(got, "Go Programming") || !strings.Contains(got, "2 msg") {
 		t.Fatalf("second row = %q, want conference 3 with its count", got)
 	}
 }
@@ -761,7 +761,7 @@ func TestUnreadMessagesAreMarkedAndCounted(t *testing.T) {
 	h := newHarness(t)
 
 	// Go Programming holds two messages, both unread to begin with.
-	if got := h.row(listTop+1); !strings.Contains(got, "2/2 msg") {
+	if got := h.row(listTop + 1); !strings.Contains(got, "2/2 msg") {
 		t.Fatalf("conference row = %q, want it to show 2 of 2 unread", got)
 	}
 	if !strings.Contains(h.row(listTop+1), "•") {
@@ -793,7 +793,7 @@ func TestReadingAMessageMarksIt(t *testing.T) {
 		t.Fatalf("message row = %q, want the bullet gone once it is read", h.row(listTop))
 	}
 	h.esc()
-	if got := h.row(listTop+1); !strings.Contains(got, "1/2 msg") {
+	if got := h.row(listTop + 1); !strings.Contains(got, "1/2 msg") {
 		t.Fatalf("conference row = %q, want 1 of 2 still unread", got)
 	}
 }
@@ -847,7 +847,7 @@ func TestMarkConferenceRead(t *testing.T) {
 	h.assertContains("Marked Go Programming read", "the reader confirms it")
 
 	h.esc()
-	if got := h.row(listTop+1); strings.Contains(got, "/2 msg") {
+	if got := h.row(listTop + 1); strings.Contains(got, "/2 msg") {
 		t.Fatalf("conference row = %q, want no unread count left", got)
 	}
 }

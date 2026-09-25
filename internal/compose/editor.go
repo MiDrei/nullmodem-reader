@@ -42,6 +42,71 @@ func EditorCommand() (name string, args []string) {
 	return "vi", nil
 }
 
+// ExternalEditorChosen reports whether VISUAL or EDITOR names an
+// editor. Without one, the reader uses its own built-in editor rather
+// than guessing at Notepad or vi.
+func ExternalEditorChosen() bool {
+	for _, env := range []string{"VISUAL", "EDITOR"} {
+		if strings.TrimSpace(os.Getenv(env)) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// WithTearline ends body with the tearline, unless it already has one
+// (a queued message being edited, say).
+func WithTearline(body string) string {
+	for _, l := range strings.Split(body, "\n") {
+		if isTearline(strings.TrimSpace(l)) {
+			return body
+		}
+	}
+	return strings.TrimRight(body, "\n") + "\n\n" + Tearline
+}
+
+// sendWidth is the longest line a message goes out with: the classic
+// 79 columns every reader and terminal on the other end can show.
+const sendWidth = 79
+
+// WrapForSending wraps lines longer than sendWidth at word boundaries.
+// The built-in editor keeps a paragraph as one line and only wraps it
+// on screen; a reader on the other end may not wrap at all.
+func WrapForSending(body string) string {
+	lines := strings.Split(body, "\n")
+	out := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if len([]rune(l)) <= sendWidth {
+			out = append(out, l)
+			continue
+		}
+		out = append(out, wrapLine(l, sendWidth)...)
+	}
+	return strings.Join(out, "\n")
+}
+
+// wrapLine breaks one line at the last space before width, or hard at
+// width when a word is longer than that.
+func wrapLine(l string, width int) []string {
+	var out []string
+	r := []rune(l)
+	for len(r) > width {
+		cut := width
+		for i := width; i > 0; i-- {
+			if r[i] == ' ' {
+				cut = i
+				break
+			}
+		}
+		out = append(out, strings.TrimRight(string(r[:cut]), " "))
+		r = r[cut:]
+		for len(r) > 0 && r[0] == ' ' {
+			r = r[1:]
+		}
+	}
+	return append(out, string(r))
+}
+
 // Edit opens initial in the user's editor and returns what they
 // saved.
 //

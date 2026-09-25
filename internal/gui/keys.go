@@ -74,6 +74,8 @@ var controlKeys = map[ebiten.Key]tcell.Key{
 	ebiten.KeyU: tcell.KeyCtrlU,
 	ebiten.KeyD: tcell.KeyCtrlD,
 	ebiten.KeyC: tcell.KeyCtrlC,
+	ebiten.KeyS: tcell.KeyCtrlS,
+	ebiten.KeyV: tcell.KeyCtrlV,
 }
 
 // pollKeys turns this tick's input into key events.

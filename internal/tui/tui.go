@@ -18,6 +18,7 @@ import (
 
 	"git.maik.ch/nullmodem/kit/ansi"
 	"git.maik.ch/nullmodem/reader/internal/app"
+	"git.maik.ch/nullmodem/reader/internal/clipboard"
 )
 
 // dosColors is ansi.DOSPalette resolved to tcell colors once at
@@ -78,6 +79,13 @@ func Run(a *app.App) error {
 		}
 	}()
 
+	// With bracketed paste, a terminal's paste arrives marked as such
+	// instead of as typing -- a pasted line break would otherwise act
+	// as Enter and submit a form half-filled.
+	screen.EnablePaste()
+	var pasting bool
+	var pasted strings.Builder
+
 	for !a.Quit() {
 		w, h := screen.Size()
 		present(screen, a.Render(w, h))
@@ -91,8 +99,34 @@ func Run(a *app.App) error {
 		switch ev := screen.PollEvent().(type) {
 		case *tcell.EventResize:
 			screen.Sync()
+		case *tcell.EventPaste:
+			if ev.Start() {
+				pasting = true
+				pasted.Reset()
+			} else if pasting {
+				pasting = false
+				a.HandlePaste(pasted.String())
+			}
 		case *tcell.EventKey:
-			a.HandleKey(ev)
+			switch {
+			case pasting && ev.Key() == tcell.KeyRune:
+				pasted.WriteRune(ev.Rune())
+			case pasting && (ev.Key() == tcell.KeyEnter || ev.Key() == tcell.KeyCtrlJ):
+				pasted.WriteByte('\n')
+			case pasting && ev.Key() == tcell.KeyTab:
+				pasted.WriteByte('\t')
+			case pasting:
+			case ev.Key() == tcell.KeyCtrlV:
+				// Ctrl-V itself, for terminals whose own paste key is
+				// something else: read the system clipboard directly.
+				if text, err := clipboard.Read(); err == nil {
+					a.HandlePaste(text)
+				} else {
+					a.Flash("Cannot read the clipboard -- use your terminal's own paste.")
+				}
+			default:
+				a.HandleKey(ev)
+			}
 		}
 	}
 	return nil

@@ -429,6 +429,10 @@ func (v *setupForm) draw(a *App, g *ansi.Grid, r rect) {
 	}
 }
 
+func (v *setupForm) paste(a *App, text string) {
+	v.fields()[v.focus].paste(strings.TrimSpace(text))
+}
+
 func (v *setupForm) key(a *App, ev *tcell.EventKey) bool {
 	switch ev.Key() {
 	case tcell.KeyTab, tcell.KeyDown:

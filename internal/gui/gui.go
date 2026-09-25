@@ -7,11 +7,13 @@ import (
 	"image/png"
 	"os"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"git.maik.ch/nullmodem/kit/ansi"
 	"git.maik.ch/nullmodem/reader/assets"
 	"git.maik.ch/nullmodem/reader/internal/app"
+	"git.maik.ch/nullmodem/reader/internal/clipboard"
 )
 
 // Default window geometry: the classic 80x25 text screen at 2x, which
@@ -126,6 +128,17 @@ func (w *window) resizeTo(pxW, pxH int) {
 func (w *window) Update() error {
 	w.ticks++
 	for _, ev := range pollKeys() {
+		if ev.Key() == tcell.KeyCtrlV {
+			// Ctrl-V (Cmd-V on a Mac) pastes: the window has no
+			// clipboard of its own, so the frontend fetches it.
+			text, err := clipboard.Read()
+			if err != nil {
+				w.a.Flash("Cannot read the clipboard: " + err.Error())
+				continue
+			}
+			w.a.HandlePaste(text)
+			continue
+		}
 		w.a.HandleKey(ev)
 	}
 	if w.a.Quit() {

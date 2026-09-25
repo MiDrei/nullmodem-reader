@@ -52,6 +52,28 @@ func (f *field) display() string {
 	return f.String()
 }
 
+// paste inserts the first line of text at the cursor, replacing a
+// selected value; tabs become spaces and other control characters go.
+func (f *field) paste(text string) {
+	if i := strings.IndexAny(text, "\r\n"); i >= 0 {
+		text = text[:i]
+	}
+	var clean []rune
+	for _, r := range text {
+		switch {
+		case r == '\t':
+			clean = append(clean, ' ')
+		case r >= ' ':
+			clean = append(clean, r)
+		}
+	}
+	if f.selected {
+		f.value, f.cur, f.selected = nil, 0, false
+	}
+	f.value = append(f.value[:f.cur], append(clean, f.value[f.cur:]...)...)
+	f.cur += len(clean)
+}
+
 // edit applies one keypress, reporting whether it was consumed.
 // Anything it does not consume falls through to the form's own
 // bindings, which is what lets Tab and Enter keep working while a
@@ -372,6 +394,13 @@ func (v *composeForm) draw(a *App, g *ansi.Grid, r rect) {
 	}
 }
 
+func (v *composeForm) paste(a *App, text string) {
+	if v.onTagline() {
+		return
+	}
+	v.fields()[v.focus].paste(text)
+}
+
 func (v *composeForm) key(a *App, ev *tcell.EventKey) bool {
 	switch ev.Key() {
 	case tcell.KeyTab, tcell.KeyDown:
@@ -422,6 +451,21 @@ func (a *App) writeAndQueue(v *composeForm) {
 		return
 	}
 
+	// The built-in editor, unless someone has chosen their own with
+	// VISUAL or EDITOR -- which is also the only way to get the old
+	// external-editor behaviour back.
+	if !compose.ExternalEditorChosen() {
+		initial := ""
+		switch {
+		case v.editing != nil:
+			initial = v.editing.Body
+		case v.quoted != "":
+			initial = v.quoted + "\n\n"
+		}
+		a.push(newEditorView(v, to, initial))
+		return
+	}
+
 	initial := compose.Template(v.quoted)
 	if v.editing != nil {
 		initial = compose.EditTemplate(v.editing.Body)
@@ -431,12 +475,24 @@ func (a *App) writeAndQueue(v *composeForm) {
 		a.flash = err.Error()
 		return
 	}
+	a.finishCompose(v, to, compose.StripTemplate(body), false)
+}
 
-	body = compose.StripTemplate(body)
+// finishCompose queues what was written -- or, for a queued message
+// being edited, saves it back. builtin says the text came from the
+// reader's own editor, which shows no tearline: it is added here.
+func (a *App) finishCompose(v *composeForm, to, body string, builtin bool) {
+	body = strings.TrimRight(body, " \n")
 	if compose.IsEmpty(body) {
-		a.pop()
+		a.popTo(v)
 		a.flash = "Nothing written -- the message was discarded."
 		return
+	}
+	if builtin {
+		body = compose.WrapForSending(body)
+		if v.editing == nil {
+			body = compose.WithTearline(body)
+		}
 	}
 
 	if v.editing != nil {
@@ -448,7 +504,7 @@ func (a *App) writeAndQueue(v *composeForm) {
 			a.flash = "Could not save the message: " + err.Error()
 			return
 		}
-		a.pop()
+		a.popTo(v)
 		if o, ok := a.top().(*outbox); ok {
 			o.reload()
 		}
@@ -480,10 +536,21 @@ func (a *App) writeAndQueue(v *composeForm) {
 		return
 	}
 
-	a.pop()
+	a.popTo(v)
 	n, _ := a.queue.Len()
 	a.flash = fmt.Sprintf("Queued for %s (%d waiting) -- %s. [%s]",
 		v.conf.Name, n, a.sendHint(), stored.ID)
+}
+
+// popTo removes v and everything above it -- the form and, when the
+// built-in editor was used, the editor on top of it.
+func (a *App) popTo(v view) {
+	for i := len(a.stack) - 1; i > 0; i-- {
+		if a.stack[i] == v {
+			a.stack = a.stack[:i]
+			return
+		}
+	}
 }
 
 // sendHint says how queued messages go out: from inside the reader

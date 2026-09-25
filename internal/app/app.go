@@ -246,6 +246,31 @@ func (a *App) HandleKey(ev *tcell.EventKey) {
 	}
 }
 
+// paster is a view that takes pasted text.
+type paster interface {
+	paste(a *App, text string)
+}
+
+// HandlePaste inserts text from the clipboard (or a terminal's paste)
+// where the keyboard is: a form field gets its first line, the editor
+// all of it. Elsewhere there is nothing to paste into.
+func (a *App) HandlePaste(text string) {
+	a.settle()
+	if a.busy != "" || a.help {
+		return
+	}
+	a.flash = ""
+	if p, ok := a.top().(paster); ok {
+		p.paste(a, text)
+		return
+	}
+	a.flash = "Nothing to paste into here."
+}
+
+// Flash shows a one-off message in the status bar, e.g. a frontend's
+// own trouble reading the clipboard.
+func (a *App) Flash(text string) { a.flash = text }
+
 // Render composes the whole interface into a w by h grid.
 func (a *App) Render(w, h int) ansi.Grid {
 	a.settle()
@@ -308,7 +333,10 @@ func (a *App) drawStatus(g *ansi.Grid, w, h int) {
 		if _, isHome := a.top().(*homeView); !isHome && !a.inForm() && a.fetch != nil {
 			text += "  f:fetch"
 		}
-		text += "  ?:help"
+		if !a.inForm() {
+			// In a form or the editor, ? is typed, not help.
+			text += "  ?:help"
+		}
 	default:
 		// A flash is either a confirmation or a refusal, and both are
 		// worth a colour the eye catches without reading first.
@@ -383,7 +411,7 @@ func (a *App) newNetmail() {
 // are typed rather than acting as commands.
 func (a *App) inForm() bool {
 	switch a.top().(type) {
-	case *composeForm, *setupForm:
+	case *composeForm, *setupForm, *editorView:
 		return true
 	}
 	return false

@@ -72,8 +72,9 @@ Art auf, die nicht in Zeichenreihenfolge gezeichnet wird.
   Scrollen, Hilfe-Overlay, Resize. Gegen tcells Simulations-Screen getestet,
   nicht nur von Hand angesehen.
 - **Antworten verfassen**: `r` antwortet (Empfänger, Betreff und Zitat vorbelegt),
-  `e` schreibt neu. Der Nachrichtentext geht an `$VISUAL`/`$EDITOR` — deine
-  Tastenbelegung, dein Undo, deine Rechtschreibprüfung. Entwürfe landen in einer
+  `e` schreibt neu. Den Text schreibst du im eingebauten Editor (siehe
+  *Schreiben*); wer `$VISUAL`/`$EDITOR` setzt, bekommt stattdessen seinen
+  eigenen — Tastenbelegung, Undo, Rechtschreibprüfung. Entwürfe landen in einer
   Warteschlange, die einen Neustart übersteht; `nmr fetch` baut daraus ein `.REP`
   und sendet es.
 - **Lesezeiger**: Ungelesenes ist mit `•` markiert, die Konferenzliste zeigt
@@ -98,8 +99,6 @@ Art auf, die nicht in Zeichenreihenfolge gezeichnet wird.
 
 **Offen**
 
-- Einfügen aus der Zwischenablage (Strg+V) im Fenster -- Ebitengine hat
-  keinen Zugriff darauf, Adresse und Passwort müssen getippt werden.
 - `bbskit/zmodem` liegt ungenutzt bereit, falls die serielle Strecke doch
   einmal gebraucht wird.
 
@@ -135,6 +134,23 @@ Einrichtungsdialog; ist eingerichtet, aber noch nichts heruntergeladen, holt
 der Reader sofort Post; sonst zeigt er alle heruntergeladenen Pakete zusammen
 als eine Ansicht. Was vor einem Austausch ungelesen war, bleibt so stehen, bis
 es gelesen ist — die BBS liefert eine Nachricht nur einmal aus.
+
+### Schreiben
+
+Enter im Formular öffnet den eingebauten Editor im selben Fenster: Pfeile,
+Pos1/Ende, Bild auf/ab, Absätze werden am Fensterrand umbrochen, beim
+Speichern auf 79 Spalten. Bei einer Antwort steht das Zitat schon drin, der
+Cursor darunter. `Strg+S` legt die Nachricht in die Warteschlange, `Esc`
+fragt vor dem Verwerfen nach. Tagline und Tearline hängt der Reader selbst an.
+
+Einfügen geht überall mit `Strg+V` (am Mac `Cmd+V`), im Editor mehrzeilig, in
+Feldern die erste Zeile. Im Fenster liest der Reader die Zwischenablage
+selbst — unter Windows direkt, am Mac per `pbpaste`, unter Linux per
+`wl-paste`, `xclip` oder `xsel`, je nachdem, was installiert ist. Im Terminal
+funktioniert zusätzlich das eigene Einfügen des Terminals.
+
+Mit gesetztem `VISUAL` oder `EDITOR` nimmt der Reader wie früher diesen
+Editor statt des eingebauten.
 
 ### Netmail
 

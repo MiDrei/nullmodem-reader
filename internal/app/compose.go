@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -414,6 +415,9 @@ func (a *App) runEditor(initial string) (string, error) {
 	}
 
 	body, err := compose.Edit(initial)
+	if errors.Is(err, compose.ErrReturnedAtOnce) {
+		return "", err
+	}
 	if err != nil {
 		name, _ := compose.EditorCommand()
 		return "", fmt.Errorf("editor %s failed: %w", name, err)

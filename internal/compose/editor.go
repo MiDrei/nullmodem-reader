@@ -1,12 +1,16 @@
 package compose
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
+
+	"golang.org/x/term"
 )
 
 // EditorCommand returns the editor to run and its arguments, from
@@ -61,7 +65,16 @@ func Edit(initial string) (string, error) {
 
 	name, args := EditorCommand()
 	cmd := exec.Command(name, append(args, path)...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	// A terminal editor needs the terminal; a windowed one does not.
+	// Only hand the standard streams on when they are one: a reader
+	// started by double-click on Windows has no console any more
+	// (Ebitengine frees it), and passing its dead handles on makes
+	// Windows refuse to start the editor at all ("The request is not
+	// supported"). Left nil, the editor gets the null device.
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	}
+	started := time.Now()
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("compose: running %s: %w", name, err)
 	}
@@ -70,8 +83,21 @@ func Edit(initial string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("compose: reading the draft back: %w", err)
 	}
+	if runtime.GOOS == "windows" && string(edited) == initial && time.Since(started) < returnedAtOnce {
+		return "", ErrReturnedAtOnce
+	}
 	return string(edited), nil
 }
+
+// returnedAtOnce is quicker than anyone writes a message.
+const returnedAtOnce = 2 * time.Second
+
+// ErrReturnedAtOnce means the editor came back before anyone could
+// have written anything. Windows 11's Notepad does that when a Notepad
+// window is already open: it opens the draft as a tab there and the
+// process that was started exits straight away. Treating that as "the
+// user wrote nothing" would throw the draft away under their hands.
+var ErrReturnedAtOnce = errors.New("the editor closed right away -- if the draft opened in a Notepad window that was already open, close all Notepad windows and press Enter again")
 
 // Template is the buffer the editor opens on: a hint line the user
 // deletes, the quoted original if there is one, and the tearline.

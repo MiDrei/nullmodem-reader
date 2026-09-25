@@ -348,3 +348,18 @@ func TestSetupWithoutAnyPasswordAsksForOne(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestReplyIDComesFromTheNewestPacket(t *testing.T) {
+	dir := t.TempDir()
+	if got := replyID(dir, "LOCALID"); got != "LOCALID" {
+		t.Fatalf("no packets: %q, want the fallback", got)
+	}
+	control := qwk.ControlInfo{BBSName: "Maiks Place BBS", BBSID: "MAIKSPLA", Conferences: []qwk.ConferenceInfo{{Number: 0, Name: "Personal"}}}
+	msgs := []qwk.PackedMessage{{Header: qwk.MessageHeader{Number: 1, Conference: 0, To: "x", From: "y", Subject: "z"}, Text: "t"}}
+	if err := qwk.BuildQWKPacket(filepath.Join(dir, "MAIKSPLA.QWK"), control, msgs); err != nil {
+		t.Fatal(err)
+	}
+	if got := replyID(dir, "LOCALID"); got != "MAIKSPLA" {
+		t.Fatalf("replyID = %q, want the packet's MAIKSPLA", got)
+	}
+}

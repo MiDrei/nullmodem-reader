@@ -499,7 +499,27 @@ func exchangeLocked(ctx context.Context, client *xfer.Client, cfg config.Config,
 	if err != nil {
 		return exchange.Result{}, err
 	}
-	return exchange.Run(ctx, client, q, sys.ID, exchange.Dirs{Down: d.down, Up: d.up})
+	return exchange.Run(ctx, client, q, replyID(d.down, sys.ID), exchange.Dirs{Down: d.down, Up: d.up})
+}
+
+// replyID is the BBS ID a reply packet is named after: the one the BBS
+// itself put into its newest packet, since that is what it will look
+// for. The configured system ID is only a fallback before the first
+// download -- it is a local name and may have been chosen by hand.
+func replyID(downDir, fallback string) string {
+	paths, err := downloadedPackets(downDir)
+	if err != nil {
+		return fallback
+	}
+	p, err := qwk.OpenPacket(paths[len(paths)-1])
+	if err != nil {
+		return fallback
+	}
+	defer p.Close()
+	if id := strings.TrimSpace(p.Control.BBSID); id != "" {
+		return id
+	}
+	return fallback
 }
 
 func noPasswordError(sys config.System) error {

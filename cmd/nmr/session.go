@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"git.maik.ch/nullmodem/kit/qwk"
 	"git.maik.ch/nullmodem/reader/internal/app"
+	"git.maik.ch/nullmodem/reader/internal/compose"
 	"git.maik.ch/nullmodem/reader/internal/config"
 	"git.maik.ch/nullmodem/reader/internal/sched"
 	"git.maik.ch/nullmodem/reader/internal/xfer"
@@ -36,12 +38,40 @@ const defaultKeepDays = 30
 func (s session) options() app.Options {
 	opts := app.Options{Fetch: s.fetch, Latest: s.latest, Setup: s.setup,
 		SetupDefaults: app.SetupInput{KeepDays: defaultKeepDays}}
+	if dir, err := s.configDir(); err == nil {
+		// Taglines live next to the configuration: the shipped ones
+		// plus the user's own taglines.txt, and the last pick in
+		// tagline.choice so the next message starts from it.
+		opts.Taglines = compose.LoadTaglines(filepath.Join(dir, "taglines.txt"))
+		choiceFile := filepath.Join(dir, "tagline.choice")
+		if data, err := os.ReadFile(choiceFile); err == nil {
+			opts.TaglineChoice = strings.TrimSpace(string(data))
+		}
+		opts.SaveTaglineChoice = func(choice string) {
+			if err := os.MkdirAll(dir, 0o755); err == nil {
+				_ = os.WriteFile(choiceFile, []byte(choice+"\n"), 0o600)
+			}
+		}
+	}
 	if _, sys, err := loadSystem(s.configPath, s.systemID); err == nil {
 		_, have := sys.Password()
 		opts.SetupDefaults = app.SetupInput{URL: sys.URL, Username: sys.Username,
 			KeepDays: sys.KeepDays, HavePassword: have}
 	}
 	return opts
+}
+
+// configDir is the directory the configuration file lives in, whether
+// or not it exists yet.
+func (s session) configDir() (string, error) {
+	if s.configPath != "" {
+		return filepath.Dir(s.configPath), nil
+	}
+	p, err := config.DefaultPath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(p), nil
 }
 
 // start builds the reader for "nmr gui" without a packet argument.

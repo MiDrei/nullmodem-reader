@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"regexp"
 	"strconv"
 	"strings"
@@ -127,6 +128,11 @@ type composeForm struct {
 	focus   int
 	// editing is the queued message being changed, nil for a new one.
 	editing *store.Reply
+	// taglines are the ones on offer (see offerTaglines); tagIdx picks
+	// 0 none, 1 random -- showing randomPick -- or taglines[tagIdx-2].
+	taglines   []string
+	tagIdx     int
+	randomPick string
 	// refNumber is the message being answered, 0 for a new thread.
 	refNumber int
 	// quoted is the prepared quote seeded into the editor buffer.
@@ -201,7 +207,60 @@ func newMessageForm(conf Conference, from string) *composeForm {
 }
 
 func (v *composeForm) keyHelp() string {
+	if v.onTagline() {
+		return "←→:choose tagline  space:another random  Enter:write the message  Esc:cancel"
+	}
 	return "Tab:field  Enter:write the message  Esc:cancel"
+}
+
+// offerTaglines adds the tagline choice to a new message or reply,
+// starting at last time's pick. Editing a queued message never gets
+// one: its text already went through this once.
+func (v *composeForm) offerTaglines(taglines []string, choice string) {
+	if len(taglines) == 0 || v.editing != nil {
+		return
+	}
+	v.taglines = taglines
+	v.randomPick = taglines[rand.IntN(len(taglines))]
+	switch choice {
+	case TaglineNone:
+		v.tagIdx = 0
+	case TaglineRandom, "":
+		v.tagIdx = 1
+	default:
+		v.tagIdx = 1
+		for i, t := range taglines {
+			if t == choice {
+				v.tagIdx = i + 2
+			}
+		}
+	}
+}
+
+// focusCount is the text fields plus the tagline row, if offered.
+func (v *composeForm) focusCount() int {
+	if len(v.taglines) > 0 {
+		return len(v.fields()) + 1
+	}
+	return len(v.fields())
+}
+
+func (v *composeForm) onTagline() bool {
+	return len(v.taglines) > 0 && v.focus == len(v.fields())
+}
+
+// tagline is the chosen tagline's text, "" for none; choice is how to
+// remember the pick.
+func (v *composeForm) tagline() (text, choice string) {
+	switch {
+	case len(v.taglines) == 0 || v.tagIdx == 0:
+		return "", TaglineNone
+	case v.tagIdx == 1:
+		return v.randomPick, TaglineRandom
+	default:
+		t := v.taglines[v.tagIdx-2]
+		return t, t
+	}
 }
 
 func (v *composeForm) fields() []*field {
@@ -270,6 +329,25 @@ func (v *composeForm) draw(a *App, g *ansi.Grid, r rect) {
 			"Address: empty for someone on this BBS, else e.g. 2:301/1")
 		row++
 	}
+	if len(v.taglines) > 0 && row < r.y+r.h {
+		drawText(g, r.x+1, row, r.w-1, fgDim, bgText, pad("Tagline:", 10))
+		text, _ := v.tagline()
+		label := "... " + text
+		switch v.tagIdx {
+		case 0:
+			label = "(none)"
+		case 1:
+			label = "(random) ... " + text
+		}
+		label = "← " + label + " →"
+		fg, bg := fgText, bgText
+		if v.onTagline() {
+			fg, bg = fgSelected, bgSelected
+			fill(g, rect{r.x + 11, row, max(r.w-12, 1), 1}, fg, bg)
+		}
+		drawText(g, r.x+11, row, r.w-12, fg, bg, label)
+		row++
+	}
 	if v.editing != nil && v.editing.Error != "" && row < r.y+r.h {
 		drawText(g, r.x+1, row, r.w-1, fgAccent, bgText, "Refused last time: "+v.editing.Error)
 		row++
@@ -296,13 +374,31 @@ func (v *composeForm) draw(a *App, g *ansi.Grid, r rect) {
 func (v *composeForm) key(a *App, ev *tcell.EventKey) bool {
 	switch ev.Key() {
 	case tcell.KeyTab, tcell.KeyDown:
-		v.focus = (v.focus + 1) % len(v.fields())
+		v.focus = (v.focus + 1) % v.focusCount()
 		return true
 	case tcell.KeyBacktab, tcell.KeyUp:
-		v.focus = (v.focus + len(v.fields()) - 1) % len(v.fields())
+		v.focus = (v.focus + v.focusCount() - 1) % v.focusCount()
 		return true
 	case tcell.KeyEnter:
 		a.writeAndQueue(v)
+		return true
+	}
+	if v.onTagline() {
+		n := len(v.taglines) + 2
+		switch {
+		case ev.Key() == tcell.KeyRight:
+			v.tagIdx = (v.tagIdx + 1) % n
+		case ev.Key() == tcell.KeyLeft:
+			v.tagIdx = (v.tagIdx + n - 1) % n
+		case ev.Rune() == ' ':
+			if v.tagIdx == 1 {
+				v.randomPick = v.taglines[rand.IntN(len(v.taglines))]
+			} else {
+				v.tagIdx = (v.tagIdx + 1) % n
+			}
+		}
+		// Letters mean nothing here, and must not fall through to the
+		// reader's own single-key commands.
 		return true
 	}
 	return v.fields()[v.focus].edit(ev)
@@ -357,6 +453,15 @@ func (a *App) writeAndQueue(v *composeForm) {
 		}
 		a.flash = "Saved -- " + a.sendHint() + "."
 		return
+	}
+
+	tagline, choice := v.tagline()
+	body = compose.WithTagline(body, tagline)
+	if len(v.taglines) > 0 && choice != a.taglineChoice {
+		a.taglineChoice = choice
+		if a.saveTaglineChoice != nil {
+			a.saveTaglineChoice(choice)
+		}
 	}
 
 	stored, err := a.queue.Add(store.Reply{

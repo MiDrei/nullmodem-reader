@@ -1,6 +1,7 @@
 package compose
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -275,6 +276,42 @@ func TestTearlineCarriesTheVersionAndAnyTearlineCountsAsEmpty(t *testing.T) {
 	for _, old := range []string{"--- QWKReader/nmr", "--- NullModem Reader/nmr v0.5.2", "---"} {
 		if !IsEmpty(old) {
 			t.Errorf("IsEmpty(%q) = false, want an older tearline to count as furniture", old)
+		}
+	}
+}
+
+func TestWithTaglineGoesAboveTheTearline(t *testing.T) {
+	got := WithTagline("Hallo\n\n--- NullModem Reader/nmr v1", "NO CARRIER")
+	if got != "Hallo\n\n... NO CARRIER\n--- NullModem Reader/nmr v1" {
+		t.Fatalf("got %q", got)
+	}
+	if got := WithTagline("Hallo\n", "NO CARRIER"); got != "Hallo\n... NO CARRIER" {
+		t.Fatalf("without a tearline: %q", got)
+	}
+	if got := WithTagline("Hallo", ""); got != "Hallo" {
+		t.Fatalf("no tagline: %q", got)
+	}
+}
+
+func TestLoadTaglinesAddsTheUsersOwn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "taglines.txt")
+	os.WriteFile(path, []byte("# mine\nMein eigener Spruch\n\nNO CARRIER\n"+strings.Repeat("x", 90)+"\n"), 0o600)
+	got := LoadTaglines(path)
+	if len(got) != len(DefaultTaglines)+1 || got[len(got)-1] != "Mein eigener Spruch" {
+		t.Fatalf("got %d taglines, last %q; want the defaults plus one (comment, blank, duplicate and overlong skipped)", len(got), got[len(got)-1])
+	}
+	if n := len(LoadTaglines(filepath.Join(t.TempDir(), "missing.txt"))); n != len(DefaultTaglines) {
+		t.Fatalf("missing file: %d taglines", n)
+	}
+	for _, tl := range DefaultTaglines {
+		if len(tl) > maxTagline {
+			t.Errorf("default tagline too long: %q", tl)
+		}
+		for _, r := range tl {
+			if r > 127 {
+				t.Errorf("default tagline not ASCII: %q", tl)
+				break
+			}
 		}
 	}
 }

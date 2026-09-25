@@ -150,6 +150,19 @@ Schreibrechte, …), bleibt sie mit dem Grund in der Warteschlange (`o`, mit `!`
 markiert) und wird nicht erneut gesendet: `e` öffnet sie zum Korrigieren,
 danach geht sie mit dem nächsten Austausch raus; `d` verwirft sie.
 
+### Taglines
+
+Neue Nachrichten und Antworten bekommen auf Wunsch eine Tagline, als
+`... Text` direkt über der Tearline (`--- NullModem Reader/nmr <version>`).
+Die Zeile „Tagline“ im Formular wählt mit ←/→: keine, zufällig (Leertaste
+zieht eine andere) oder eine bestimmte. Die Wahl gilt als Vorgabe für die
+nächste Nachricht.
+
+Rund 20 Taglines sind eingebaut. Eigene kommen in `taglines.txt` neben der
+Konfigurationsdatei (unter Windows `%APPDATA%\nmr\`), eine pro Zeile, `#`
+leitet einen Kommentar ein, mehr als 75 Zeichen passen nicht auf eine Zeile
+und werden übergangen.
+
 Aufräumen stellst du im Einrichtungsdialog unter „Keep days“ ein (in der
 Konfiguration `keep_days`, je BBS): Ein Paket, in dem alles gelesen ist, wird
 nach so vielen Tagen gelöscht, gesendete Antwortpakete ebenso; das neueste

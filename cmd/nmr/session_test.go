@@ -363,3 +363,24 @@ func TestReplyIDComesFromTheNewestPacket(t *testing.T) {
 		t.Fatalf("replyID = %q, want the packet's MAIKSPLA", got)
 	}
 }
+
+func TestTaglinesComeFromNextToTheConfigAndTheChoiceSticks(t *testing.T) {
+	s, path := newSession(t)
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(dir, "taglines.txt"), []byte("Mein eigener Spruch\n"), 0o600)
+
+	opts := s.options()
+	if last := opts.Taglines[len(opts.Taglines)-1]; last != "Mein eigener Spruch" {
+		t.Fatalf("last tagline = %q, want the user's own after the defaults", last)
+	}
+	if opts.TaglineChoice != "" {
+		t.Fatalf("choice = %q before anything was picked", opts.TaglineChoice)
+	}
+	opts.SaveTaglineChoice("Mein eigener Spruch")
+	if got := s.options().TaglineChoice; got != "Mein eigener Spruch" {
+		t.Fatalf("choice after saving = %q", got)
+	}
+}

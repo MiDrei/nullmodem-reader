@@ -471,5 +471,6 @@ func (a *App) compose(form *composeForm) {
 		a.flash = "Replies cannot be written: no data directory for this packet."
 		return
 	}
+	form.offerTaglines(a.taglines, a.taglineChoice)
 	a.push(form)
 }

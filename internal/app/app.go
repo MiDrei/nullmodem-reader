@@ -54,7 +54,21 @@ type Options struct {
 	// SetupDefaults prefill the setup screen: the configured address
 	// and username. The password is never prefilled.
 	SetupDefaults SetupInput
+
+	// Taglines are offered in the compose form (see offerTaglines);
+	// none hides the choice. TaglineChoice is the one picked last time
+	// -- TaglineNone, TaglineRandom or a tagline's text -- and
+	// SaveTaglineChoice remembers a new pick for next time.
+	Taglines          []string
+	TaglineChoice     string
+	SaveTaglineChoice func(choice string)
 }
+
+// The tagline choices besides a specific tagline.
+const (
+	TaglineNone   = "none"
+	TaglineRandom = "random"
+)
 
 // App is the reader's interface: state, key handling, and a Grid.
 //
@@ -78,6 +92,10 @@ type App struct {
 	setupDefaults SetupInput
 	// setupNote waits to be shown after the fetch that setup starts.
 	setupNote string
+
+	taglines          []string
+	taglineChoice     string
+	saveTaglineChoice func(string)
 
 	// busy names the background work in progress (see run), shown in
 	// the status bar; done carries its outcome back to the frontend's
@@ -141,6 +159,7 @@ func newApp(opts Options) *App {
 		queue: opts.Queue, read: opts.Read, from: opts.From,
 		fetch: opts.Fetch, latest: opts.Latest,
 		setup: opts.Setup, setupDefaults: opts.SetupDefaults,
+		taglines: opts.Taglines, taglineChoice: opts.TaglineChoice, saveTaglineChoice: opts.SaveTaglineChoice,
 		done: make(chan func(*App), 1),
 	}
 	if a.read == nil {

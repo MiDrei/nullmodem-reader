@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -79,40 +80,76 @@ func (m model) messageCount() int {
 	return n
 }
 
-// newModel arranges an opened packet for display: messages grouped by
-// conference in packet order, conferences sorted by number, names
-// taken from CONTROL.DAT where it has them.
-func newModel(path string, p *qwk.Packet) model {
-	m := model{
-		path:       path,
-		bbsName:    ui.DecodeField(p.Control.BBSName),
-		packetTime: p.Control.PacketTime,
-		caller:     ui.DecodeField(p.Control.CallerName),
-		qwke:       p.QWKE,
-	}
+// Source is one downloaded packet the reader shows.
+type Source struct {
+	Path   string
+	Packet *qwk.Packet
+}
 
+// newModel arranges one opened packet for display.
+func newModel(path string, p *qwk.Packet) model {
+	return mergeModel([]Source{{Path: path, Packet: p}})
+}
+
+// mergeModel arranges packets for display as one: messages grouped by
+// conference, conferences sorted by number, names taken from
+// CONTROL.DAT where it has them. sources run oldest first, so within a
+// conference messages keep the order they arrived in, and the newest
+// packet has the last word on the header, conference names and the
+// welcome screen.
+//
+// Showing every downloaded packet rather than just the newest is what
+// keeps unread mail from disappearing: the BBS counts a message as
+// delivered once it is in a packet, so a message not read before the
+// next fetch would otherwise only be reachable by opening its old
+// packet by hand. A message that turns up in two packets -- the same
+// file downloaded twice, say -- is shown once.
+func mergeModel(sources []Source) model {
+	var m model
 	byNumber := map[int]*Conference{}
 	var order []int
-	for _, pm := range p.Messages {
-		n := pm.Header.Conference
-		conf, ok := byNumber[n]
-		if !ok {
-			conf = &Conference{Number: n, Name: conferenceName(p, n)}
+	seen := map[string]bool{}
+
+	for _, src := range sources {
+		p := src.Packet
+		m.path = src.Path
+		m.bbsName = ui.DecodeField(p.Control.BBSName)
+		m.packetTime = p.Control.PacketTime
+		m.caller = ui.DecodeField(p.Control.CallerName)
+		m.qwke = p.QWKE
+
+		for _, pm := range p.Messages {
+			n := pm.Header.Conference
+			conf, ok := byNumber[n]
+			if !ok {
+				conf = &Conference{Number: n, Name: conferenceName(p, n)}
+				byNumber[n] = conf
+				order = append(order, n)
+			} else if c, named := p.Conference(n); named && strings.TrimSpace(c.Name) != "" {
+				conf.Name = ui.DecodeField(c.Name)
+			}
 			if area, ok := p.Ext.Area(n); ok && area.IsNetmail() {
 				conf.Netmail = true
 			}
-			byNumber[n] = conf
-			order = append(order, n)
+
+			msg := newMessage(pm)
+			key := fmt.Sprintf("%d\x00%d\x00%s\x00%s\x00%d", n, msg.Number, msg.From, msg.Subject, msg.Written.Unix())
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			conf.Messages = append(conf.Messages, msg)
 		}
-		conf.Messages = append(conf.Messages, newMessage(pm))
+
+		if welcome, name := findWelcome(p); welcome != nil {
+			m.welcome, m.welcomeName = welcome, name
+		}
 	}
 
 	sort.Ints(order)
 	for _, n := range order {
 		m.conferences = append(m.conferences, *byNumber[n])
 	}
-
-	m.welcome, m.welcomeName = findWelcome(p)
 	return m
 }
 

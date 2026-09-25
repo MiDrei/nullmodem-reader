@@ -48,14 +48,15 @@ func (s session) start(opts app.Options) (*app.App, error) {
 		return nil, err
 	}
 
-	path, err := newestPacket(systemDirs(cfg, sys).down)
+	l, err := s.loadAll(cfg, sys)
 	switch {
 	case errors.Is(err, errNoPacket):
 		return app.NewHome(opts, app.HomeFetch, ""), nil
 	case err != nil:
 		return nil, err
 	}
-	return openPacket(path, s, opts)
+	opts.Queue, opts.Read, opts.From = l.Queue, l.Read, l.From
+	return app.NewMerged(l.Sources, opts)
 }
 
 // fetch is one exchange, with login problems reported as
@@ -95,25 +96,40 @@ func (s session) fetch(ctx context.Context) (app.FetchResult, error) {
 	return out, err
 }
 
-// latest opens the newest downloaded packet with its queue and read
-// markers.
+// latest opens every downloaded packet, for after an exchange.
 func (s session) latest() (app.Loaded, error) {
 	cfg, sys, err := loadSystem(s.configPath, s.systemID)
 	if err != nil {
 		return app.Loaded{}, err
 	}
-	path, err := newestPacket(systemDirs(cfg, sys).down)
+	return s.loadAll(cfg, sys)
+}
+
+// loadAll opens every packet downloaded for sys, oldest first, with
+// the queue and read markers they share. A packet that no longer opens
+// is skipped rather than keeping the rest from being read.
+func (s session) loadAll(cfg config.Config, sys config.System) (app.Loaded, error) {
+	paths, err := downloadedPackets(systemDirs(cfg, sys).down)
 	if err != nil {
 		return app.Loaded{}, err
 	}
-	p, err := qwk.OpenPacket(path)
-	if err != nil {
-		return app.Loaded{}, err
+	var l app.Loaded
+	for _, path := range paths {
+		p, err := qwk.OpenPacket(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "nmr: skipping %s: %v\n", path, err)
+			continue
+		}
+		l.Sources = append(l.Sources, app.Source{Path: path, Packet: p})
 	}
-	// Same fallback as a packet opened at start-up: without a queue
-	// or read markers the packet is still readable.
-	q, read, from, _ := packetContext(s.configPath, s.systemID, p)
-	return app.Loaded{Path: path, Packet: p, Queue: q, Read: read, From: from}, nil
+	if len(l.Sources) == 0 {
+		return app.Loaded{}, errNoPacket
+	}
+	// Same fallback as a packet opened by hand: without a queue or
+	// read markers the packets are still readable.
+	newest := l.Sources[len(l.Sources)-1].Packet
+	l.Queue, l.Read, l.From, _ = packetContext(s.configPath, s.systemID, newest)
+	return l, nil
 }
 
 // setup checks a login against the BBS and saves it: the address and

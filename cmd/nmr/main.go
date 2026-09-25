@@ -36,8 +36,8 @@ const usage = `nmr -- QWK(E) offline reader
 
   nmr open    [packet.qwk]        read a packet in the terminal
   nmr gui     [packet.qwk]        read a packet in a window (CP437 bitmap font)
-                                  without a packet: the newest one, or first-run
-                                  setup and fetching when there is none yet
+                                  without a packet: every downloaded one together,
+                                  or first-run setup and fetching when there is none
   nmr daemon  [-s ID]             exchange on a schedule until stopped
   nmr outbox  [-s ID]             list the replies waiting to be sent
   nmr init                        write a starter configuration
@@ -150,9 +150,10 @@ func cmdOpen(window bool, args []string) error {
 			return err
 		}
 	} else {
-		// No packet named: open the newest one already downloaded, so
-		// "nmr fetch && nmr open" is the whole daily routine -- or, on
-		// a first run, set up and fetch from inside the reader.
+		// No packet named: show every packet downloaded so far as one,
+		// so "nmr fetch && nmr open" is the whole daily routine and
+		// mail left unread before a fetch is still there -- or, on a
+		// first run, set up and fetch from inside the reader.
 		a, err = sess.start(opts)
 		if err != nil {
 			if !window {
@@ -192,19 +193,22 @@ func openPacket(path string, sess session, opts app.Options) (*app.App, error) {
 // errNoPacket means nothing has been downloaded yet.
 var errNoPacket = errors.New("no packets downloaded yet")
 
-// newestPacket finds the most recently downloaded packet in dir, by
-// modification time.
-func newestPacket(dir string) (string, error) {
+// downloadedPackets lists the packets in dir, oldest first by
+// modification time -- the order they were fetched in.
+func downloadedPackets(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", errNoPacket
+			return nil, errNoPacket
 		}
-		return "", fmt.Errorf("reading %s: %w", dir, err)
+		return nil, fmt.Errorf("reading %s: %w", dir, err)
 	}
 
-	var newest string
-	var newestTime time.Time
+	type packet struct {
+		path string
+		mod  time.Time
+	}
+	var found []packet
 	for _, e := range entries {
 		if e.IsDir() || !strings.EqualFold(filepath.Ext(e.Name()), ".qwk") {
 			continue
@@ -213,14 +217,17 @@ func newestPacket(dir string) (string, error) {
 		if err != nil {
 			continue
 		}
-		if newest == "" || info.ModTime().After(newestTime) {
-			newest, newestTime = filepath.Join(dir, e.Name()), info.ModTime()
-		}
+		found = append(found, packet{filepath.Join(dir, e.Name()), info.ModTime()})
 	}
-	if newest == "" {
-		return "", errNoPacket
+	if len(found) == 0 {
+		return nil, errNoPacket
 	}
-	return newest, nil
+	sort.SliceStable(found, func(i, j int) bool { return found[i].mod.Before(found[j].mod) })
+	paths := make([]string, len(found))
+	for i, f := range found {
+		paths[i] = f.path
+	}
+	return paths, nil
 }
 
 // -------------------------------------------------------------- daemon

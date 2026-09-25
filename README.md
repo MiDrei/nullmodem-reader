@@ -132,7 +132,14 @@ welche Version läuft.
 `nmr gui` (unter Windows auch der Doppelklick) und `nmr open` brauchen kein
 Paket als Argument: Ist noch nichts eingerichtet, erscheint der
 Einrichtungsdialog; ist eingerichtet, aber noch nichts heruntergeladen, holt
-der Reader sofort Post; sonst öffnet er das neueste Paket.
+der Reader sofort Post; sonst zeigt er alle heruntergeladenen Pakete zusammen
+als eine Ansicht. Was vor einem Austausch ungelesen war, bleibt so stehen, bis
+es gelesen ist — die BBS liefert eine Nachricht nur einmal aus.
+
+Die Lesezeiger hängen an der Nachrichtennummer. NullModem BBS vergibt dafür
+ab Version 0.25.1 die Datenbank-ID, die in jedem Paket gleich bleibt; vorher
+begann jedes Paket bei 1, sodass neue Post als gelesen erscheinen konnte.
+Lesezeiger aus dieser Zeit verwirft der Reader beim ersten Start einmal.
 
 Im Reader tauscht `f` Post aus — Antworten senden, neue Post holen, auf das
 neue Paket wechseln — ohne dass das Fenster hängt. `s` öffnet die Einrichtung
@@ -198,7 +205,7 @@ oder ganz ohne Fenster:
 go run ./cmd/nmr init          # schreibt eine Beispielkonfiguration
 export NMR_PASSWORD_NULLMDM=…  # Passwort nicht in die Datei
 go run ./cmd/nmr fetch
-go run ./cmd/nmr open            # das zuletzt geholte Paket
+go run ./cmd/nmr open            # alle geholten Pakete zusammen
 ```
 
 Automatisch im Hintergrund, mit `poll:` je System in der Konfiguration:

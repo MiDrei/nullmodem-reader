@@ -3,6 +3,7 @@ package store
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -187,5 +188,39 @@ func TestLoadingAMissingFileIsNotAnError(t *testing.T) {
 	}
 	if len(s.Conferences) != 0 {
 		t.Fatalf("Conferences = %+v, want empty", s.Conferences)
+	}
+}
+
+func TestMarkersFromBeforeStableNumberingAreDiscardedOnce(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "readstate.json")
+	legacy := `{"conferences":{"3":{"last_read":5}}}`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := LoadReadState(path)
+	if err != nil {
+		t.Fatalf("LoadReadState: %v", err)
+	}
+	if s.IsRead(3, 1) {
+		t.Fatal("a legacy marker survived: message 1 in conference 3 counts as read")
+	}
+	// The reset is written back even though nothing was marked since.
+	if err := s.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	data, _ := os.ReadFile(path)
+	if !strings.Contains(string(data), `"numbering": 2`) {
+		t.Fatalf("saved file does not record the numbering:\n%s", data)
+	}
+
+	// From now on markers are kept.
+	s.MarkRead(3, 4711)
+	if err := s.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	again, _ := LoadReadState(path)
+	if !again.IsRead(3, 4711) {
+		t.Fatal("a marker saved under the new numbering was dropped")
 	}
 }

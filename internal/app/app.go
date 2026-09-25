@@ -125,6 +125,17 @@ func New(path string, p *qwk.Packet, opts Options) (*App, error) {
 	return a, nil
 }
 
+// NewMerged builds the reader's interface over several packets shown
+// as one (see mergeModel), oldest first. The model copies what it
+// shows, so the packets are closed before it returns.
+func NewMerged(sources []Source, opts Options) (*App, error) {
+	a := newApp(opts)
+	if err := a.load(Loaded{Sources: sources, Queue: opts.Queue, Read: opts.Read, From: opts.From}); err != nil {
+		return nil, fmt.Errorf("app: %w", err)
+	}
+	return a, nil
+}
+
 func newApp(opts Options) *App {
 	a := &App{
 		queue: opts.Queue, read: opts.Read, from: opts.From,

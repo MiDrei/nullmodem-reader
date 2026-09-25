@@ -58,9 +58,18 @@ func LoadReadState(path string) (*ReadState, error) {
 		return nil, fmt.Errorf("store: reading %s: %w", path, err)
 	}
 	var onDisk struct {
+		Numbering   int                      `json:"numbering"`
 		Conferences map[int]*ConferenceState `json:"conferences"`
 	}
 	if err := json.Unmarshal(data, &onDisk); err != nil {
+		return s, nil
+	}
+	if onDisk.Numbering < numbering {
+		// Markers from before NullModem BBS numbered messages by
+		// their database ID: back then every packet restarted at 1,
+		// so a marker says nothing reliable about any message. Start
+		// over once, and say so on the next save.
+		s.dirty = true
 		return s, nil
 	}
 	if onDisk.Conferences != nil {
@@ -68,6 +77,11 @@ func LoadReadState(path string) (*ReadState, error) {
 	}
 	return s, nil
 }
+
+// numbering versions the meaning of the message numbers the markers
+// refer to. 2: NullModem BBS's database IDs, the same in every packet.
+// Files without the field predate that and are discarded on load.
+const numbering = 2
 
 // IsRead reports whether message num in conference conf has been read.
 //
@@ -157,8 +171,9 @@ func (s *ReadState) Save() error {
 	}
 
 	data, err := json.MarshalIndent(struct {
+		Numbering   int                      `json:"numbering"`
 		Conferences map[int]*ConferenceState `json:"conferences"`
-	}{s.Conferences}, "", "  ")
+	}{numbering, s.Conferences}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("store: encoding read state: %w", err)
 	}

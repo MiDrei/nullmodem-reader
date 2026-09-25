@@ -9,7 +9,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 
 	"git.maik.ch/nullmodem/kit/ansi"
-	"git.maik.ch/nullmodem/kit/qwk"
 	"git.maik.ch/nullmodem/reader/internal/store"
 )
 
@@ -31,14 +30,14 @@ type FetchResult struct {
 	Note string
 }
 
-// Loaded is a packet plus everything the reader needs around it -- the
-// same things Options carries for a packet opened at start-up.
+// Loaded is the packets to show, oldest first, plus everything the
+// reader needs around them -- the same things Options carries for a
+// packet opened at start-up.
 type Loaded struct {
-	Path   string
-	Packet *qwk.Packet
-	Queue  *store.Queue
-	Read   *store.ReadState
-	From   string
+	Sources []Source
+	Queue   *store.Queue
+	Read    *store.ReadState
+	From    string
 }
 
 // SetupInput is what the setup screen asks for.
@@ -209,11 +208,16 @@ func appendNote(text, note string) string {
 // first, and the views start over at the conference list, since the
 // message the user was on may not exist in the new packet.
 func (a *App) load(l Loaded) error {
-	m := newModel(l.Path, l.Packet)
-	// The model copies everything it shows, so the packet can go.
-	l.Packet.Close()
+	if len(l.Sources) == 0 {
+		return errors.New("no packets to show")
+	}
+	m := mergeModel(l.Sources)
+	// The model copies everything it shows, so the packets can go.
+	for _, src := range l.Sources {
+		src.Packet.Close()
+	}
 	if len(m.conferences) == 0 && m.welcome == nil {
-		return fmt.Errorf("%s holds no messages", l.Path)
+		return fmt.Errorf("%s holds no messages", m.path)
 	}
 	if err := a.read.Save(); err != nil {
 		a.flash = "Could not save read markers: " + err.Error()

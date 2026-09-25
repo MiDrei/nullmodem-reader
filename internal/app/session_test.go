@@ -48,7 +48,7 @@ func (f *fakeSession) options() Options {
 			if err != nil {
 				return Loaded{}, err
 			}
-			return Loaded{Path: f.packetPath, Packet: p, From: "Alice Example"}, nil
+			return Loaded{Sources: []Source{{Path: f.packetPath, Packet: p}}, From: "Alice Example"}, nil
 		},
 	}
 }

@@ -11,8 +11,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/zalando/go-keyring"
+
+	"git.maik.ch/nullmodem/kit/ansi"
+	"git.maik.ch/nullmodem/kit/qwk"
 
 	"git.maik.ch/nullmodem/reader/internal/app"
 	"git.maik.ch/nullmodem/reader/internal/config"
@@ -169,4 +174,63 @@ func TestNormalizeURLAndBBSID(t *testing.T) {
 			t.Errorf("bbsID(%q) = %q, want %q", in, got, want)
 		}
 	}
+}
+
+func TestStartShowsEveryDownloadedPacketOldestFirst(t *testing.T) {
+	s, path := newSession(t)
+	if err := config.Save(path, config.Config{Systems: []config.System{{ID: "NULLMODE", URL: "http://bbs.invalid", Username: "alice"}}}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	cfg, sys, err := loadSystem(path, "")
+	if err != nil {
+		t.Fatalf("loadSystem: %v", err)
+	}
+	down := systemDirs(cfg, sys).down
+	if err := os.MkdirAll(down, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, subject string, num int, mod time.Time) {
+		t.Helper()
+		p := filepath.Join(down, name)
+		control := qwk.ControlInfo{BBSName: "NullModem BBS", BBSID: "NULLMODE", CallerName: "ALICE",
+			Conferences: []qwk.ConferenceInfo{{Number: 3, Name: "General"}}}
+		msgs := []qwk.PackedMessage{{Header: qwk.MessageHeader{Number: num, Conference: 3, To: "ALL", From: "BOB",
+			Subject: subject, Written: mod}, Text: "x"}}
+		if err := qwk.BuildQWKPacket(p, control, msgs); err != nil {
+			t.Fatalf("BuildQWKPacket: %v", err)
+		}
+		if err := os.Chtimes(p, mod, mod); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Named against their age, so the order can only come from mtime.
+	write("Z.QWK", "older mail", 101, time.Now().Add(-48*time.Hour))
+	write("A.QWK", "newer mail", 105, time.Now().Add(-time.Hour))
+
+	paths, err := downloadedPackets(down)
+	if err != nil || len(paths) != 2 || filepath.Base(paths[0]) != "Z.QWK" {
+		t.Fatalf("downloadedPackets = %v, %v; want Z.QWK (older) first", paths, err)
+	}
+
+	a, err := s.start(s.options())
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	a.HandleKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+	screen := gridText(a.Render(80, 24))
+	older, newer := strings.Index(screen, "older mail"), strings.Index(screen, "newer mail")
+	if older < 0 || newer < 0 || older > newer {
+		t.Fatalf("want both messages, older first:\n%s", screen)
+	}
+}
+
+func gridText(g ansi.Grid) string {
+	var b strings.Builder
+	for y := 0; y < g.Height; y++ {
+		for x := 0; x < g.Width; x++ {
+			b.WriteRune(ansi.Rune(g.Cells[y*g.Width+x].Char))
+		}
+		b.WriteByte('\n')
+	}
+	return b.String()
 }

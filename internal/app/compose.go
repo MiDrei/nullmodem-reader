@@ -150,6 +150,9 @@ type composeForm struct {
 	focus   int
 	// editing is the queued message being changed, nil for a new one.
 	editing *store.Reply
+	// original is the message being answered, nil for a new one: the
+	// editor can quote its SEEN-BY/PATH lines on request.
+	original *Message
 	// taglines are the ones on offer (see offerTaglines); tagIdx picks
 	// 0 none, 1 random -- showing randomPick -- or taglines[tagIdx-2].
 	taglines   []string
@@ -166,14 +169,16 @@ type composeForm struct {
 // newReplyForm prepares a reply to m.
 func newReplyForm(conf Conference, m Message, from string, width int) *composeForm {
 	name, addr := splitRecipient(m.From)
+	orig := m
 	return &composeForm{
+		original:  &orig,
 		conf:      conf,
 		from:      from,
 		to:        newField("To", name),
 		address:   newField("Address", addr),
 		subject:   newField("Subject", compose.ReplySubject(m.Subject)),
 		refNumber: m.Number,
-		quoted:    compose.Quote(decodeBody(m.Body), name, width),
+		quoted:    compose.Quote(compose.StripFooter(decodeBody(m.Body)), name, width),
 		private:   m.Private,
 	}
 }
@@ -460,7 +465,8 @@ func (a *App) writeAndQueue(v *composeForm) {
 		case v.editing != nil:
 			initial = v.editing.Body
 		case v.quoted != "":
-			initial = v.quoted + "\n\n"
+			// One blank line under the quote, the cursor below it.
+			initial = strings.TrimRight(v.quoted, "\n") + "\n\n"
 		}
 		a.push(newEditorView(v, to, initial))
 		return

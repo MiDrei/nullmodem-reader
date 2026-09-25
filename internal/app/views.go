@@ -280,6 +280,9 @@ type messageView struct {
 	width  int
 	grid   ansi.Grid
 	scroll int
+	// showRouting shows echomail's SEEN-BY/PATH lines under the text;
+	// it stays on while stepping through messages.
+	showRouting bool
 }
 
 func newMessageView(a *App, c Conference, index, width int) *messageView {
@@ -294,12 +297,24 @@ func newMessageView(a *App, c Conference, index, width int) *messageView {
 // window width changes -- prose has to rewrap, and art has to not.
 func (v *messageView) layout(width int) {
 	v.width = width
-	v.grid = ui.MessageGrid(v.conf.Messages[v.index].Body, width)
+	m := v.conf.Messages[v.index]
+	body := m.Body
+	if v.showRouting && len(m.Routing) > 0 {
+		body = strings.TrimRight(body, "\n") + "\n\n" + strings.Join(m.Routing, "\n")
+	}
+	v.grid = ui.MessageGrid(body, width)
 	v.scroll = 0
 }
 
 func (v *messageView) keyHelp() string {
-	return "↑↓:scroll  space:page  n/p:next/prev  r:reply  Esc:back"
+	h := "↑↓:scroll  space:page  n/p:next/prev  r:reply  Esc:back"
+	if len(v.conf.Messages[v.index].Routing) > 0 {
+		if v.showRouting {
+			return h + "  S:hide SEEN-BY"
+		}
+		return h + "  S:SEEN-BY"
+	}
+	return h
 }
 
 // headerLines is the block above the body: the fields, then a rule.
@@ -393,6 +408,15 @@ func (v *messageView) key(a *App, ev *tcell.EventKey) bool {
 		v.step(-1, a)
 	case ev.Rune() == 'r':
 		a.compose(newReplyForm(v.conf, v.conf.Messages[v.index], a.from, quoteWidth(v.width)))
+	case ev.Rune() == 'S':
+		if len(v.conf.Messages[v.index].Routing) == 0 {
+			a.flash = "This message carries no SEEN-BY or PATH lines."
+			return true
+		}
+		v.showRouting = !v.showRouting
+		scroll := v.scroll
+		v.layout(v.width)
+		v.scroll = scroll
 	default:
 		return false
 	}

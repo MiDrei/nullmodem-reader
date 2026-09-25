@@ -28,6 +28,10 @@ type Message struct {
 	// for ui.MessageGrid.
 	Body    string
 	Private bool
+	// Routing is the echomail's SEEN-BY/PATH block, split off Body:
+	// hidden when reading, shown on request, quotable into a reply.
+	// CP437 lines, any leading ^A removed.
+	Routing []string
 }
 
 // Conference is one conference in the packet with its messages, in
@@ -171,6 +175,7 @@ func mergeModel(sources []Source) model {
 
 func newMessage(pm qwk.PackedMessage) Message {
 	k, body := qwk.ParseQWKEKludges(pm.Text)
+	body, routing := splitRouting(body)
 	return Message{
 		Number:  pm.Header.Number,
 		To:      ui.DecodeField(firstNonEmpty(k.To, pm.Header.To)),
@@ -181,7 +186,32 @@ func newMessage(pm qwk.PackedMessage) Message {
 		// '*' unread private, '+' read private -- the two private
 		// states in the format's status byte.
 		Private: pm.Header.Status == '*' || pm.Header.Status == '+',
+		Routing: routing,
 	}
+}
+
+// splitRouting takes the SEEN-BY/PATH block off the end of an echomail
+// body -- the lines tossers read and people do not, which NullModem
+// BBS leaves in its packets. PATH often carries a leading ^A; it is
+// dropped here. The tearline and origin line above the block stay
+// with the body, where every reader shows them.
+func splitRouting(body string) (string, []string) {
+	lines := strings.Split(body, "\n")
+	end := len(lines)
+	var routing []string
+	for end > 0 {
+		line := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[end-1]), "\x01"))
+		upper := strings.ToUpper(line)
+		switch {
+		case line == "":
+		case strings.HasPrefix(upper, "SEEN-BY:"), strings.HasPrefix(upper, "PATH:"):
+			routing = append([]string{line}, routing...)
+		default:
+			return strings.Join(lines[:end], "\n"), routing
+		}
+		end--
+	}
+	return strings.Join(lines[:end], "\n"), routing
 }
 
 func conferenceName(p *qwk.Packet, n int) string {

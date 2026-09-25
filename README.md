@@ -139,9 +139,16 @@ es gelesen ist — die BBS liefert eine Nachricht nur einmal aus.
 
 Enter im Formular öffnet den eingebauten Editor im selben Fenster: Pfeile,
 Pos1/Ende, Bild auf/ab, Absätze werden am Fensterrand umbrochen, beim
-Speichern auf 79 Spalten. Bei einer Antwort steht das Zitat schon drin, der
-Cursor darunter. `Strg+S` legt die Nachricht in die Warteschlange, `Esc`
+Speichern auf 79 Spalten. Bei einer Antwort steht das Zitat schon drin (ohne
+Tearline und Origin des Originals), der Cursor darunter. `Strg+Y` löscht die
+ganze Zeile — gedrückt gehalten eine nach der anderen, so ist ein Zitat
+schnell gekürzt. `Strg+S` legt die Nachricht in die Warteschlange, `Esc`
 fragt vor dem Verwerfen nach. Tagline und Tearline hängt der Reader selbst an.
+
+SEEN-BY und PATH einer Echomail (NullModem BBS liefert sie ab 0.26.2 mit)
+blendet der Reader aus; `S` in der Nachricht zeigt sie. In einer Antwort
+fügt `Strg+R` sie als Zitat ein (`BT> SEEN-BY: …`) — zitiert, weil eine
+nackte `SEEN-BY:`-Zeile im Text jeder Tosser für echtes Routing hielte.
 
 Einfügen geht überall mit `Strg+V` (am Mac `Cmd+V`), im Editor mehrzeilig, in
 Feldern die erste Zeile. Im Fenster liest der Reader die Zwischenablage

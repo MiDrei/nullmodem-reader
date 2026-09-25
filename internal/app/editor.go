@@ -6,6 +6,8 @@ import (
 	"github.com/gdamore/tcell/v2"
 
 	"git.maik.ch/nullmodem/kit/ansi"
+	"git.maik.ch/nullmodem/reader/internal/compose"
+	"git.maik.ch/nullmodem/reader/internal/ui"
 )
 
 // editorView is the reader's own message editor: a full-screen text
@@ -59,7 +61,53 @@ func (v *editorView) keyHelp() string {
 	if v.confirmDiscard {
 		return "Esc again: discard this message  any other key: keep writing"
 	}
-	return "Ctrl-S:save  Esc:discard  Ctrl-V:paste"
+	h := "Ctrl-S:save  Ctrl-Y:delete line  Ctrl-V:paste  Esc:discard"
+	if v.form.original != nil && len(v.form.original.Routing) > 0 {
+		h += "  Ctrl-R:quote SEEN-BY"
+	}
+	return h
+}
+
+// deleteLine removes the cursor's whole line -- a paragraph, or one
+// line of a quote, which is what trimming a quote down needs.
+func (v *editorView) deleteLine() {
+	if len(v.lines) == 1 {
+		v.lines[0], v.col = nil, 0
+		return
+	}
+	v.lines = append(v.lines[:v.row], v.lines[v.row+1:]...)
+	if v.row >= len(v.lines) {
+		v.row = len(v.lines) - 1
+	}
+	v.col = min(v.col, len(v.lines[v.row]))
+}
+
+// quoteRouting puts the original's SEEN-BY/PATH lines in as quoted
+// lines, above the cursor's line. Quoted, because a line of the text
+// starting with a bare "SEEN-BY:" would be taken for real routing by
+// every tosser that handles the reply.
+func (v *editorView) quoteRouting(a *App) {
+	orig := v.form.original
+	if orig == nil || len(orig.Routing) == 0 {
+		a.flash = "The original carries no SEEN-BY or PATH lines."
+		return
+	}
+	prefix := []rune(compose.Initials(orig.From) + "> ")
+	var add [][]rune
+	for _, l := range orig.Routing {
+		add = append(add, append(append([]rune{}, prefix...), []rune(ui.DecodeField(l))...))
+	}
+	if len(v.lines[v.row]) > 0 {
+		// Keep the line being written whole: the block goes above it.
+		add = append(add, []rune{})
+	}
+	v.lines = append(v.lines[:v.row], append(add, v.lines[v.row:]...)...)
+	v.row += len(add)
+	v.col = 0
+	if len(v.lines[v.row]) > 0 {
+		v.row--
+		v.col = 0
+	}
 }
 
 // segment is one screen row of a logical line: runes [start,end).
@@ -220,6 +268,10 @@ func (v *editorView) key(a *App, ev *tcell.EventKey) bool {
 	case tcell.KeyCtrlS:
 		a.finishCompose(v.form, v.to, v.text(), true)
 		return true
+	case tcell.KeyCtrlY:
+		v.deleteLine()
+	case tcell.KeyCtrlR:
+		v.quoteRouting(a)
 	case tcell.KeyEnter:
 		v.newline()
 	case tcell.KeyBackspace, tcell.KeyBackspace2:

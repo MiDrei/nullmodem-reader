@@ -35,6 +35,24 @@ func isTearline(line string) bool {
 	return line == "---" || strings.HasPrefix(line, "--- ")
 }
 
+// StripFooter drops the tearline and origin line (and blank lines
+// around them) off the end of a message, for quoting: they say which
+// program and which board the original came through, and quoted they
+// would only look like a second signature on the reply.
+func StripFooter(text string) string {
+	lines := strings.Split(text, "\n")
+	end := len(lines)
+	for end > 0 {
+		l := strings.TrimSpace(lines[end-1])
+		if l == "" || isTearline(l) || strings.HasPrefix(l, "* Origin:") {
+			end--
+			continue
+		}
+		break
+	}
+	return strings.Join(lines[:end], "\n")
+}
+
 // Initials reduces a name to the two-letter prefix QWK quoting uses:
 // the first letter of each of the first two words, or the first two
 // letters when there is only one word.

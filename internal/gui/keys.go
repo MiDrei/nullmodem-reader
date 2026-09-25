@@ -76,7 +76,13 @@ var controlKeys = map[ebiten.Key]tcell.Key{
 	ebiten.KeyC: tcell.KeyCtrlC,
 	ebiten.KeyS: tcell.KeyCtrlS,
 	ebiten.KeyV: tcell.KeyCtrlV,
+	ebiten.KeyY: tcell.KeyCtrlY,
+	ebiten.KeyR: tcell.KeyCtrlR,
 }
+
+// repeatingControlKeys repeat while held, like the arrows: holding
+// Ctrl-Y deletes one line after another.
+var repeatingControlKeys = map[ebiten.Key]bool{ebiten.KeyY: true}
 
 // pollKeys turns this tick's input into key events.
 //
@@ -94,7 +100,7 @@ func pollKeys() []*tcell.EventKey {
 
 	if ctrl {
 		for k, tk := range controlKeys {
-			if inpututil.IsKeyJustPressed(k) {
+			if fires(inpututil.KeyPressDuration(k), repeatingControlKeys[k]) {
 				out = append(out, tcell.NewEventKey(tk, 0, tcell.ModCtrl))
 			}
 		}

@@ -167,7 +167,7 @@ func IsEmpty(body string) bool {
 	for _, line := range strings.Split(body, "\n") {
 		line = strings.TrimSpace(line)
 		switch {
-		case line == "", line == Tearline:
+		case line == "", isTearline(line):
 			continue
 		case isQuoted(line):
 			continue

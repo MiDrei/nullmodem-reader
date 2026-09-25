@@ -15,7 +15,25 @@ import (
 // Tearline identifies the software that wrote a message, by the
 // FidoNet/QWK convention of three dashes and a space. Other readers
 // on the same echo recognise it and keep it out of quoted text.
-const Tearline = "--- QWKReader/nmr"
+// SetVersion adds the version once the program knows it.
+var Tearline = tearlineBase
+
+const tearlineBase = "--- NullModem Reader/nmr"
+
+// SetVersion puts the running version into the tearline, e.g.
+// "--- NullModem Reader/nmr v0.5.3".
+func SetVersion(v string) {
+	Tearline = tearlineBase
+	if v != "" {
+		Tearline += " " + v
+	}
+}
+
+// isTearline reports whether line is a tearline -- this version's,
+// an older one's, or another program's.
+func isTearline(line string) bool {
+	return line == "---" || strings.HasPrefix(line, "--- ")
+}
 
 // Initials reduces a name to the two-letter prefix QWK quoting uses:
 // the first letter of each of the first two words, or the first two

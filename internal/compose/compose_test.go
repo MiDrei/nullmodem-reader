@@ -262,3 +262,19 @@ func TestIsEmptyIgnoresQuoteAttributionAndTearline(t *testing.T) {
 		t.Fatal("a draft with the user's own line is not empty")
 	}
 }
+
+func TestTearlineCarriesTheVersionAndAnyTearlineCountsAsEmpty(t *testing.T) {
+	defer SetVersion("")
+	SetVersion("v0.5.3")
+	if Tearline != "--- NullModem Reader/nmr v0.5.3" {
+		t.Fatalf("Tearline = %q", Tearline)
+	}
+	if !strings.Contains(Template(""), "--- NullModem Reader/nmr v0.5.3") {
+		t.Fatal("the draft does not carry the versioned tearline")
+	}
+	for _, old := range []string{"--- QWKReader/nmr", "--- NullModem Reader/nmr v0.5.2", "---"} {
+		if !IsEmpty(old) {
+			t.Errorf("IsEmpty(%q) = false, want an older tearline to count as furniture", old)
+		}
+	}
+}

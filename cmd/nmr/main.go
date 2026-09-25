@@ -22,6 +22,7 @@ import (
 
 	"git.maik.ch/nullmodem/kit/qwk"
 	"git.maik.ch/nullmodem/reader/internal/app"
+	"git.maik.ch/nullmodem/reader/internal/compose"
 	"git.maik.ch/nullmodem/reader/internal/config"
 	"git.maik.ch/nullmodem/reader/internal/exchange"
 	"git.maik.ch/nullmodem/reader/internal/gui"
@@ -70,6 +71,7 @@ func versionString() string {
 }
 
 func main() {
+	compose.SetVersion(versionString())
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "nmr:", err)
 		os.Exit(1)

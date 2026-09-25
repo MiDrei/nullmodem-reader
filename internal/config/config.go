@@ -224,7 +224,7 @@ const header = `# NullModem Reader configuration, written by the setup screen.
 
 // Example is a starter configuration, written on first run so the
 // user has something to edit rather than a blank file.
-const Example = `# QWKReader configuration.
+const Example = `# NullModem Reader configuration.
 #
 # The password is best kept out of this file: the reader reads
 # NMR_PASSWORD_<ID> from the environment first, then the system

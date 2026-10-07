@@ -1,9 +1,9 @@
-module git.maik.ch/nullmodem/reader
+module github.com/midrei/nullmodem-reader
 
 go 1.26.0
 
 require (
-	git.maik.ch/nullmodem/kit v0.2.2
+	github.com/midrei/nullmodem-kit v0.3.0
 	github.com/gdamore/tcell/v2 v2.13.10
 	github.com/hajimehoshi/ebiten/v2 v2.10.3
 	github.com/zalando/go-keyring v0.2.8

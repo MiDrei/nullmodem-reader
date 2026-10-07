@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"git.maik.ch/nullmodem/kit/qwk"
-	"git.maik.ch/nullmodem/reader/internal/ui"
+	"github.com/midrei/nullmodem-kit/qwk"
+	"github.com/midrei/nullmodem-reader/internal/ui"
 )
 
 // Message is one message prepared for display: header fields already

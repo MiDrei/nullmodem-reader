@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"git.maik.ch/nullmodem/kit/qwk"
-	"git.maik.ch/nullmodem/reader/internal/app"
-	"git.maik.ch/nullmodem/reader/internal/compose"
-	"git.maik.ch/nullmodem/reader/internal/config"
-	"git.maik.ch/nullmodem/reader/internal/sched"
-	"git.maik.ch/nullmodem/reader/internal/xfer"
+	"github.com/midrei/nullmodem-kit/qwk"
+	"github.com/midrei/nullmodem-reader/internal/app"
+	"github.com/midrei/nullmodem-reader/internal/compose"
+	"github.com/midrei/nullmodem-reader/internal/config"
+	"github.com/midrei/nullmodem-reader/internal/sched"
+	"github.com/midrei/nullmodem-reader/internal/xfer"
 )
 
 // session is what the reader window (or full-screen terminal) needs to

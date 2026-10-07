@@ -5,7 +5,7 @@ import (
 	"image"
 	"image/color"
 
-	"git.maik.ch/nullmodem/kit/ansi"
+	"github.com/midrei/nullmodem-kit/ansi"
 )
 
 // glyphRow returns one scanline of a glyph: eight pixels as bits,

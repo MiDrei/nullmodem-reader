@@ -18,7 +18,7 @@ import (
 	"image/png"
 	"os"
 
-	"git.maik.ch/nullmodem/reader/assets"
+	"github.com/midrei/nullmodem-reader/assets"
 )
 
 const (

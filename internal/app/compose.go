@@ -10,11 +10,11 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"git.maik.ch/nullmodem/kit/ansi"
+	"github.com/midrei/nullmodem-kit/ansi"
 
-	"git.maik.ch/nullmodem/reader/internal/compose"
-	"git.maik.ch/nullmodem/reader/internal/store"
-	"git.maik.ch/nullmodem/reader/internal/ui"
+	"github.com/midrei/nullmodem-reader/internal/compose"
+	"github.com/midrei/nullmodem-reader/internal/store"
+	"github.com/midrei/nullmodem-reader/internal/ui"
 )
 
 // field is one line of text the user can edit in the compose form.

@@ -9,8 +9,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"git.maik.ch/nullmodem/kit/qwk"
-	"git.maik.ch/nullmodem/reader/internal/store"
+	"github.com/midrei/nullmodem-kit/qwk"
+	"github.com/midrei/nullmodem-reader/internal/store"
 )
 
 // netmailHarness opens a packet shaped like NullModem BBS's: conference

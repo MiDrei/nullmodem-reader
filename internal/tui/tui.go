@@ -16,9 +16,9 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"git.maik.ch/nullmodem/kit/ansi"
-	"git.maik.ch/nullmodem/reader/internal/app"
-	"git.maik.ch/nullmodem/reader/internal/clipboard"
+	"github.com/midrei/nullmodem-kit/ansi"
+	"github.com/midrei/nullmodem-reader/internal/app"
+	"github.com/midrei/nullmodem-reader/internal/clipboard"
 )
 
 // dosColors is ansi.DOSPalette resolved to tcell colors once at

@@ -16,12 +16,12 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/zalando/go-keyring"
 
-	"git.maik.ch/nullmodem/kit/ansi"
-	"git.maik.ch/nullmodem/kit/qwk"
+	"github.com/midrei/nullmodem-kit/ansi"
+	"github.com/midrei/nullmodem-kit/qwk"
 
-	"git.maik.ch/nullmodem/reader/internal/app"
-	"git.maik.ch/nullmodem/reader/internal/config"
-	"git.maik.ch/nullmodem/reader/internal/store"
+	"github.com/midrei/nullmodem-reader/internal/app"
+	"github.com/midrei/nullmodem-reader/internal/config"
+	"github.com/midrei/nullmodem-reader/internal/store"
 )
 
 // fakeBBS answers the three calls setup and a first fetch make.

@@ -20,17 +20,17 @@ import (
 
 	"golang.org/x/term"
 
-	"git.maik.ch/nullmodem/kit/qwk"
-	"git.maik.ch/nullmodem/reader/internal/app"
-	"git.maik.ch/nullmodem/reader/internal/compose"
-	"git.maik.ch/nullmodem/reader/internal/config"
-	"git.maik.ch/nullmodem/reader/internal/exchange"
-	"git.maik.ch/nullmodem/reader/internal/gui"
-	"git.maik.ch/nullmodem/reader/internal/sched"
-	"git.maik.ch/nullmodem/reader/internal/store"
-	"git.maik.ch/nullmodem/reader/internal/tui"
-	"git.maik.ch/nullmodem/reader/internal/ui"
-	"git.maik.ch/nullmodem/reader/internal/xfer"
+	"github.com/midrei/nullmodem-kit/qwk"
+	"github.com/midrei/nullmodem-reader/internal/app"
+	"github.com/midrei/nullmodem-reader/internal/compose"
+	"github.com/midrei/nullmodem-reader/internal/config"
+	"github.com/midrei/nullmodem-reader/internal/exchange"
+	"github.com/midrei/nullmodem-reader/internal/gui"
+	"github.com/midrei/nullmodem-reader/internal/sched"
+	"github.com/midrei/nullmodem-reader/internal/store"
+	"github.com/midrei/nullmodem-reader/internal/tui"
+	"github.com/midrei/nullmodem-reader/internal/ui"
+	"github.com/midrei/nullmodem-reader/internal/xfer"
 )
 
 const usage = `nmr -- QWK(E) offline reader

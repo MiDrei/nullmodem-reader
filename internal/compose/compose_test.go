@@ -1,15 +1,15 @@
 package compose
 
 import (
-	"git.maik.ch/nullmodem/kit/ansi"
+	"github.com/midrei/nullmodem-kit/ansi"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"git.maik.ch/nullmodem/kit/qwk"
-	"git.maik.ch/nullmodem/reader/internal/store"
+	"github.com/midrei/nullmodem-kit/qwk"
+	"github.com/midrei/nullmodem-reader/internal/store"
 )
 
 func TestInitials(t *testing.T) {

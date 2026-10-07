@@ -5,9 +5,9 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"git.maik.ch/nullmodem/kit/ansi"
-	"git.maik.ch/nullmodem/reader/internal/compose"
-	"git.maik.ch/nullmodem/reader/internal/ui"
+	"github.com/midrei/nullmodem-kit/ansi"
+	"github.com/midrei/nullmodem-reader/internal/compose"
+	"github.com/midrei/nullmodem-reader/internal/ui"
 )
 
 // editorView is the reader's own message editor: a full-screen text

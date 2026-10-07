@@ -7,9 +7,9 @@ import (
 	"strings"
 	"unicode"
 
-	"git.maik.ch/nullmodem/kit/ansi"
-	"git.maik.ch/nullmodem/kit/qwk"
-	"git.maik.ch/nullmodem/reader/internal/store"
+	"github.com/midrei/nullmodem-kit/ansi"
+	"github.com/midrei/nullmodem-kit/qwk"
+	"github.com/midrei/nullmodem-reader/internal/store"
 )
 
 // Tearline identifies the software that wrote a message, by the

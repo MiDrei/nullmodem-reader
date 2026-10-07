@@ -13,9 +13,9 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"git.maik.ch/nullmodem/kit/ansi"
-	"git.maik.ch/nullmodem/kit/qwk"
-	"git.maik.ch/nullmodem/reader/internal/store"
+	"github.com/midrei/nullmodem-kit/ansi"
+	"github.com/midrei/nullmodem-kit/qwk"
+	"github.com/midrei/nullmodem-reader/internal/store"
 )
 
 const testWidth, testHeight = 80, 24

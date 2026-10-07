@@ -18,8 +18,8 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"git.maik.ch/nullmodem/kit/ansi"
-	"git.maik.ch/nullmodem/reader/assets"
+	"github.com/midrei/nullmodem-kit/ansi"
+	"github.com/midrei/nullmodem-reader/assets"
 )
 
 // Cell dimensions of the embedded font.

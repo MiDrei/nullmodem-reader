@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"git.maik.ch/nullmodem/kit/qwk"
+	"github.com/midrei/nullmodem-kit/qwk"
 )
 
 func writePacket(t *testing.T, name string, confs []qwk.ConferenceInfo, msgs []qwk.PackedMessage) string {

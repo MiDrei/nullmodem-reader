@@ -16,7 +16,7 @@ import (
 	"strconv"
 	"strings"
 
-	"git.maik.ch/nullmodem/kit/ansi"
+	"github.com/midrei/nullmodem-kit/ansi"
 )
 
 // Reset returns the terminal to its default colors.

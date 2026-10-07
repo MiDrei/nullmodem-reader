@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.maik.ch/nullmodem/kit/ansi"
+	"github.com/midrei/nullmodem-kit/ansi"
 )
 
 // gridText reads one row back as a string, trailing blanks trimmed,

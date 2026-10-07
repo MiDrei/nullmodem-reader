@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"git.maik.ch/nullmodem/kit/qwk"
-	"git.maik.ch/nullmodem/reader/internal/config"
-	"git.maik.ch/nullmodem/reader/internal/store"
+	"github.com/midrei/nullmodem-kit/qwk"
+	"github.com/midrei/nullmodem-reader/internal/config"
+	"github.com/midrei/nullmodem-reader/internal/store"
 )
 
 // prune deletes what sys.KeepDays says has been kept long enough:

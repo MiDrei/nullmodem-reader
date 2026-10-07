@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Builds NullModem Reader for every supported platform and publishes it
-# as a release on git.maik.ch.
+# as a release on GitHub.
 #
 #   scripts/release.sh v0.2.0             test, build, tag, push, publish
 #   DRY_RUN=1 scripts/release.sh v0.2.0   test and build into dist/ only
 #
-# Publishing needs GITEA_TOKEN: a personal access token with
-# write:repository scope (Settings -> Applications on git.maik.ch).
+# Publishing needs GITHUB_TOKEN: a personal access token allowed to
+# write the repository's contents (fine-grained: Contents read/write).
 #
 # Everything is built with CGO_ENABLED=0 -- Ebitengine drives X11,
 # Cocoa and Win32 without cgo -- so one machine builds all targets.
@@ -15,8 +15,7 @@
 set -euo pipefail
 
 TARGETS=(linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64)
-GITEA_URL=${GITEA_URL:-https://git.maik.ch}
-REPO=${REPO:-nullmodem/reader}
+REPO=${REPO:-midrei/nullmodem-reader}
 DRY_RUN=${DRY_RUN:-0}
 
 die() { echo "release: $*" >&2; exit 1; }
@@ -29,7 +28,7 @@ root=$(pwd)
 
 # ---- preconditions ---------------------------------------------------
 if [[ $DRY_RUN != 1 ]]; then
-	[[ -n ${GITEA_TOKEN:-} ]] || die "GITEA_TOKEN is not set (or run with DRY_RUN=1)"
+	[[ -n ${GITHUB_TOKEN:-} ]] || die "GITHUB_TOKEN is not set (or run with DRY_RUN=1)"
 	[[ -z $(git status --porcelain) ]] || die "working tree is not clean"
 	[[ $(git rev-parse --abbrev-ref HEAD) == main ]] || die "not on main"
 	git fetch -q origin
@@ -39,7 +38,7 @@ if [[ $DRY_RUN != 1 ]]; then
 fi
 ! grep -q '^replace' go.mod || die "go.mod has a replace directive -- a release must use the published kit"
 
-kit=$(GOWORK=off go list -m -f '{{.Version}}' git.maik.ch/nullmodem/kit)
+kit=$(GOWORK=off go list -m -f '{{.Version}}' github.com/midrei/nullmodem-kit)
 echo "release: $version (kit $kit)"
 
 # ---- test --------------------------------------------------------------
@@ -109,21 +108,21 @@ body=$(printf 'Built against NullModem Kit %s.\n\n%s\n\nVerify downloads with SH
 prerelease=false
 [[ $version == *-* ]] && prerelease=true
 
-api="$GITEA_URL/api/v1/repos/$REPO"
+api="https://api.github.com/repos/$REPO"
+auth=(-H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json")
 payload=$(VERSION=$version BODY=$body PRE=$prerelease python3 -c '
 import json, os
 print(json.dumps({"tag_name": os.environ["VERSION"], "name": "NullModem Reader " + os.environ["VERSION"],
                   "body": os.environ["BODY"], "draft": False, "prerelease": os.environ["PRE"] == "true"}))')
-release=$(curl -fsS -X POST "$api/releases" \
-	-H "Authorization: token $GITEA_TOKEN" -H 'Content-Type: application/json' -d "$payload") ||
+release=$(curl -fsS -X POST "$api/releases" "${auth[@]}" -H 'Content-Type: application/json' -d "$payload") ||
 	die "creating the release failed -- the tag $version is pushed; delete it or create the release by hand"
 id=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$release")
 
 for file in "$dist"/*.tar.gz "$dist"/*.zip "$dist/SHA256SUMS"; do
 	echo "release: uploading $(basename "$file")"
-	curl -fsS -o /dev/null -X POST "$api/releases/$id/assets?name=$(basename "$file")" \
-		-H "Authorization: token $GITEA_TOKEN" -F "attachment=@$file" ||
+	curl -fsS -o /dev/null -X POST "https://uploads.github.com/repos/$REPO/releases/$id/assets?name=$(basename "$file")" \
+		"${auth[@]}" -H 'Content-Type: application/octet-stream' --data-binary "@$file" ||
 		die "uploading $(basename "$file") failed"
 done
 
-echo "release: published $GITEA_URL/$REPO/releases/tag/$version"
+echo "release: published https://github.com/$REPO/releases/tag/$version"

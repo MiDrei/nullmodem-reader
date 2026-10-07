@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"git.maik.ch/nullmodem/kit/qwk"
+	"github.com/midrei/nullmodem-kit/qwk"
 )
 
 // welcome is drawn the way real BBS art is: double-line box glyphs in

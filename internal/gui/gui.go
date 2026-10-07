@@ -10,10 +10,10 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"git.maik.ch/nullmodem/kit/ansi"
-	"git.maik.ch/nullmodem/reader/assets"
-	"git.maik.ch/nullmodem/reader/internal/app"
-	"git.maik.ch/nullmodem/reader/internal/clipboard"
+	"github.com/midrei/nullmodem-kit/ansi"
+	"github.com/midrei/nullmodem-reader/assets"
+	"github.com/midrei/nullmodem-reader/internal/app"
+	"github.com/midrei/nullmodem-reader/internal/clipboard"
 )
 
 // Default window geometry: the classic 80x25 text screen at 2x, which

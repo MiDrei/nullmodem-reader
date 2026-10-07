@@ -15,7 +15,7 @@ package app
 import (
 	"strings"
 
-	"git.maik.ch/nullmodem/kit/ansi"
+	"github.com/midrei/nullmodem-kit/ansi"
 )
 
 // The DOS palette indices the interface is drawn with. Chrome uses

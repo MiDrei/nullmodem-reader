@@ -11,7 +11,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"git.maik.ch/nullmodem/kit/qwk"
+	"github.com/midrei/nullmodem-kit/qwk"
 )
 
 // fakeSession stands in for cmd/nmr's session: it records what setup

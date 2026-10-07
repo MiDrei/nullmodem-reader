@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.maik.ch/nullmodem/kit/ansi"
+	"github.com/midrei/nullmodem-kit/ansi"
 )
 
 func TestGridToTerminalMapsCP437BytesToUnicode(t *testing.T) {

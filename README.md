@@ -7,22 +7,12 @@ die BBS selbst benutzt.
 ## Abhängigkeit
 
 Der Reader hängt an
-[dem Kit](https://git.maik.ch/nullmodem/kit) — dem gemeinsamen Unterbau mit
+[dem Kit](https://github.com/midrei/nullmodem-kit) — dem gemeinsamen Unterbau mit
 NullModem BBS: `ansi` (Grid-Matrix, CP437, SGR, Layout, Templates), `qwk`
 (QWK/QWKE-Formatschicht), `zmodem`. Server und Reader müssen sich über
 Dateiformat und Bildschirmdarstellung einig sein; zwei Kopien desselben Codes
 driften ab dem ersten Bugfix auseinander, und beim QWK-Format merkt man das
 erst, wenn jemandem Post verlorengeht.
-
-Das Kit ist öffentlich, liegt aber auf git.maik.ch statt bei einem der
-großen Hoster. Damit Go es direkt dort holt statt über den öffentlichen
-Go-Proxy und die Checksum-Datenbank, einmal pro Maschine:
-
-```
-go env -w GOPRIVATE=git.maik.ch
-```
-
-`go.sum` legt die Prüfsumme trotzdem fest.
 
 ### Pakete im Reader
 
@@ -105,7 +95,7 @@ Art auf, die nicht in Zeichenreihenfolge gezeichnet wird.
 ## Installieren
 
 Fertige Builds liegen unter
-[Releases](https://git.maik.ch/nullmodem/reader/releases): ein Archiv pro
+[Releases](https://github.com/midrei/nullmodem-reader/releases): ein Archiv pro
 Plattform mit `nmr` (bzw. `nmr.exe`), dieser README, der Lizenz und der
 Font-Lizenz, dazu
 `SHA256SUMS` zum Prüfen (`sha256sum -c SHA256SUMS`). `nmr version` zeigt,
@@ -211,14 +201,13 @@ Anmeldeinformationsverwaltung, macOS-Schlüsselbund, Secret Service unter
 Linux). Wo es keinen gibt, schreibt der Dialog es in die Konfigurationsdatei
 und sagt das. `NMR_PASSWORD_<ID>` in der Umgebung hat weiterhin Vorrang.
 
-Oder aus dem Quelltext: `go install git.maik.ch/nullmodem/reader/cmd/nmr@latest`
-(mit `GOPRIVATE` wie oben).
+Oder aus dem Quelltext: `go install github.com/midrei/nullmodem-reader/cmd/nmr@latest`.
 
 ## Releases
 
 ```
 DRY_RUN=1 scripts/release.sh v0.2.0   # testen und nach dist/ bauen, sonst nichts
-GITEA_TOKEN=… scripts/release.sh v0.2.0
+GITHUB_TOKEN=… scripts/release.sh v0.2.0
 ```
 
 Das Skript prüft, dass `main` sauber und mit `origin` gleichauf ist und
@@ -226,8 +215,8 @@ Das Skript prüft, dass `main` sauber und mit `origin` gleichauf ist und
 alle sechs Ziele mit `GOWORK=off` — also gegen die Kit-Version aus `go.mod`,
 nicht gegen einen lokalen Checkout — und packt sie samt `SHA256SUMS`. Erst
 danach setzt es den Tag, pusht ihn und legt das Release mit den Archiven auf
-git.maik.ch an. `GITEA_TOKEN` ist ein persönlicher Token mit
-`write:repository` (Einstellungen → Anwendungen).
+GitHub an. `GITHUB_TOKEN` ist ein persönlicher Token, der die Inhalte des
+Repos schreiben darf (fein granular: *Contents* lesen/schreiben).
 
 Braucht der Reader eine neue Kit-Version, kommt die zuerst — siehe
 *Releases* in der README des Kits.

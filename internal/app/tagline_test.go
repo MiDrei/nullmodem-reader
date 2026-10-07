@@ -6,7 +6,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"git.maik.ch/nullmodem/reader/internal/store"
+	"github.com/midrei/nullmodem-reader/internal/store"
 )
 
 // taglineHarness is the netmail harness with two taglines on offer and

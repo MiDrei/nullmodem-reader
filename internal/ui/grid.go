@@ -3,7 +3,7 @@ package ui
 import (
 	"bytes"
 
-	"git.maik.ch/nullmodem/kit/ansi"
+	"github.com/midrei/nullmodem-kit/ansi"
 )
 
 // ArtWidth is the canvas BBS art is drawn for.

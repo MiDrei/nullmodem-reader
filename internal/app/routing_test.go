@@ -8,8 +8,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"git.maik.ch/nullmodem/kit/qwk"
-	"git.maik.ch/nullmodem/reader/internal/store"
+	"github.com/midrei/nullmodem-kit/qwk"
+	"github.com/midrei/nullmodem-reader/internal/store"
 )
 
 const routedBody = "Ping!\nZweite Zeile\nDritte Zeile\n--- SomeTosser\n * Origin: Somewhere (2:301/1)\nSEEN-BY: 301/1 100\n\x01PATH: 301/1 1"

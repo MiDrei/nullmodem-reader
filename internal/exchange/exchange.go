@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"git.maik.ch/nullmodem/kit/qwk"
-	"git.maik.ch/nullmodem/reader/internal/compose"
-	"git.maik.ch/nullmodem/reader/internal/store"
-	"git.maik.ch/nullmodem/reader/internal/xfer"
+	"github.com/midrei/nullmodem-kit/qwk"
+	"github.com/midrei/nullmodem-reader/internal/compose"
+	"github.com/midrei/nullmodem-reader/internal/store"
+	"github.com/midrei/nullmodem-reader/internal/xfer"
 )
 
 // Dirs are the per-system directories an exchange works in.

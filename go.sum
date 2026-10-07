@@ -18,6 +18,8 @@ github.com/hajimehoshi/ebiten/v2 v2.10.3 h1:+Mw9+CGYAkD/xlTKax/H7vgsuPdlHriJFgXo
 github.com/hajimehoshi/ebiten/v2 v2.10.3/go.mod h1:47QNgyS/y2ZRkjVUvlGLx8a+F7MSjcn8/GsjcCZ9Rc8=
 github.com/lucasb-eyer/go-colorful v1.3.0 h1:2/yBRLdWBZKrf7gB40FoiKfAWYQ0lqNcbuQwVHXptag=
 github.com/lucasb-eyer/go-colorful v1.3.0/go.mod h1:R4dSotOR9KMtayYi1e77YzuveK+i7ruzyGqttikkLy0=
+github.com/midrei/nullmodem-kit v0.3.0 h1:ONYnTXM/i38k3SujbodQoDq0raLitatFw7eKBU2EMMo=
+github.com/midrei/nullmodem-kit v0.3.0/go.mod h1:147EU6mYfhHCZE0DctvkxLACG/LHl77H+eDy/m4aGy8=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/rivo/uniseg v0.4.7 h1:WUdvkW8uEhrYfLC4ZzdpI2ztxP1I582+49Oc5Mq64VQ=

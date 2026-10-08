@@ -16,6 +16,8 @@ set -euo pipefail
 
 TARGETS=(linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64)
 REPO=${REPO:-midrei/nullmodem-reader}
+# The git remote that is the GitHub repository (a fresh clone: origin).
+REMOTE=${REMOTE:-origin}
 DRY_RUN=${DRY_RUN:-0}
 
 die() { echo "release: $*" >&2; exit 1; }
@@ -31,10 +33,10 @@ if [[ $DRY_RUN != 1 ]]; then
 	[[ -n ${GITHUB_TOKEN:-} ]] || die "GITHUB_TOKEN is not set (or run with DRY_RUN=1)"
 	[[ -z $(git status --porcelain) ]] || die "working tree is not clean"
 	[[ $(git rev-parse --abbrev-ref HEAD) == main ]] || die "not on main"
-	git fetch -q origin
-	[[ $(git rev-parse HEAD) == $(git rev-parse origin/main) ]] || die "main is not in sync with origin/main"
+	git fetch -q "$REMOTE"
+	[[ $(git rev-parse HEAD) == $(git rev-parse "$REMOTE/main") ]] || die "main is not in sync with $REMOTE/main"
 	! git rev-parse -q --verify "refs/tags/$version" >/dev/null || die "tag $version already exists locally"
-	[[ -z $(git ls-remote --tags origin "refs/tags/$version") ]] || die "tag $version already exists on origin"
+	[[ -z $(git ls-remote --tags "$REMOTE" "refs/tags/$version") ]] || die "tag $version already exists on $REMOTE"
 fi
 ! grep -q '^replace' go.mod || die "go.mod has a replace directive -- a release must use the published kit"
 
@@ -96,7 +98,7 @@ fi
 # ---- tag and publish ---------------------------------------------------
 previous=$(git describe --tags --abbrev=0 2>/dev/null || true)
 git tag -a "$version" -m "NullModem Reader $version"
-git push -q origin "$version"
+git push -q "$REMOTE" "$version"
 
 if [[ -n $previous ]]; then
 	changes=$(git log --format='- %s' "$previous..$version")

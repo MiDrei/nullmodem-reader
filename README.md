@@ -207,7 +207,7 @@ Oder aus dem Quelltext: `go install github.com/midrei/nullmodem-reader/cmd/nmr@l
 
 ```
 DRY_RUN=1 scripts/release.sh v0.2.0   # testen und nach dist/ bauen, sonst nichts
-GITHUB_TOKEN=… scripts/release.sh v0.2.0
+GITHUB_TOKEN=… scripts/release.sh v0.2.0    # REMOTE=github, falls origin nicht GitHub ist
 ```
 
 Das Skript prüft, dass `main` sauber und mit `origin` gleichauf ist und

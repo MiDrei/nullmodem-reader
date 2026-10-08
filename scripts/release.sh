@@ -77,7 +77,7 @@ for target in "${TARGETS[@]}"; do
 		go build -trimpath -ldflags "-s -w -X main.version=$version" -o "$stage/$exe" ./cmd/nmr
 	# The reader's own license (MIT) and the embedded CP437 font's
 	# (Spleen, BSD-2-Clause) both have to travel with every binary.
-	cp README.md LICENSE "$stage/"
+	cp README.md README.de.md LICENSE "$stage/"
 	cp assets/font/LICENSE.spleen "$stage/"
 	if [[ $os == windows ]]; then
 		(cd "$dist" && python3 -m zipfile -c "$name.zip" "$name/")

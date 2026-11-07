@@ -15,3 +15,4 @@ go.work.sum
 
 # Windows-Ressourcen (Symbol, Versionsangaben), erzeugt von scripts/release.sh
 /cmd/nmr/*.syso
+.env

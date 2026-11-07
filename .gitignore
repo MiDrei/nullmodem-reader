@@ -16,3 +16,5 @@ go.work.sum
 # Windows-Ressourcen (Symbol, Versionsangaben), erzeugt von scripts/release.sh
 /cmd/nmr/*.syso
 .env
+# Local working notes, not published
+CLAUDE.md
